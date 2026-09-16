@@ -113,6 +113,8 @@ export default function AuthLockScreen({ onAuthenticated }) {
           position: 'relative',
         }}
       >
+    <div className="auth-screen-container">
+      <div className={`auth-screen-box ${shake ? 'shake-animation' : ''}`}>
         {/* Brand Icon / Header */}
         <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
           <div

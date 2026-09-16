@@ -215,6 +215,10 @@ button {
   transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
+.navbar-top-row {
+  display: contents;
+}
+
 .nav-brand {
   display: flex;
   align-items: center;
@@ -256,6 +260,11 @@ button {
   border: 1px solid var(--border-color);
 }
 
+.brand-subtitle {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
 .nav-tabs {
   display: flex;
   gap: 0.35rem;
@@ -293,6 +302,35 @@ button {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.senior-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  background-color: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+}
+
+.nav-btn-refresh,
+.nav-btn-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.nav-btn-lock {
+  border-color: rgba(239, 68, 68, 0.3);
+  color: var(--accent-red);
+}
+
+.nav-btn-text {
+  display: inline;
 }
 
 .theme-toggle-btn {
@@ -1518,4 +1556,415 @@ button {
   animation: shakeKeyframes 0.4s ease-in-out;
 }
 
+/* Auth Lock Screen Layout */
+.auth-screen-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background-color: var(--bg-app, #030712);
+  background-image: radial-gradient(ellipse at 50% 15%, rgba(56, 189, 248, 0.08) 0%, transparent 60%);
+}
 
+.auth-screen-box {
+  width: 100%;
+  max-width: 430px;
+  background-color: var(--bg-surface, #0f172a);
+  border: 1px solid var(--border-color, #1e293b);
+  border-radius: 1rem;
+  padding: 2.25rem 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 30px rgba(56, 189, 248, 0.08);
+  position: relative;
+}
+
+/* Common Layout Helpers */
+.filter-bar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.plan-actions-group {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* =========================================================================
+   RESPONSIVE DESIGN & MOBILE OPTIMIZATIONS (TABLETS & PHONES: <= 768px)
+   ========================================================================= */
+
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  .app-container {
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  /* Navigation Bar */
+  .navbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.65rem 0.85rem;
+    gap: 0.65rem;
+  }
+
+  .navbar-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+
+  .nav-brand {
+    gap: 0.55rem;
+  }
+
+  .brand-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .brand-title {
+    font-size: 1.05rem;
+  }
+
+  .brand-badge {
+    font-size: 0.65rem;
+    padding: 0.1rem 0.4rem;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+
+  .nav-actions {
+    gap: 0.35rem;
+  }
+
+  .senior-badge {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.72rem;
+    gap: 0.3rem;
+  }
+
+  .theme-toggle-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .nav-btn-refresh .nav-btn-text,
+  .nav-btn-lock .nav-btn-text {
+    display: none;
+  }
+
+  .nav-btn-refresh,
+  .nav-btn-lock {
+    padding: 0.35rem 0.5rem;
+    min-width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Horizontal swipeable tab bar */
+  .nav-tabs {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 0.25rem;
+    gap: 0.25rem;
+  }
+
+  .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-tab {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Main Container Padding */
+  .main-content {
+    padding: 1rem 0.75rem;
+  }
+
+  /* Card paddings */
+  .card {
+    padding: 1.15rem;
+    border-radius: var(--radius-md);
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .card-header > div:last-child {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .card-header > div:last-child > button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* Calendar Card adjustments */
+  .app-calendar-card {
+    padding: 1rem 0.75rem;
+    border-radius: var(--radius-md);
+  }
+
+  .day-details-card {
+    padding: 1.15rem;
+    border-radius: var(--radius-md);
+  }
+
+  .attendance-header-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .attendance-header-bar > div:first-child {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+
+  .segmented-view-toggle {
+    align-self: flex-end;
+  }
+
+  .attendance-wh-filter {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.6rem;
+    max-width: 160px;
+  }
+
+  /* Day cells sizing on mobile */
+  .attendance-days-grid {
+    gap: 4px;
+  }
+
+  .attendance-weekdays-row {
+    gap: 4px;
+  }
+
+  .attendance-weekday-label {
+    font-size: 0.75rem;
+    padding: 0.15rem 0;
+  }
+
+  .day-box {
+    min-height: 44px;
+    max-height: 56px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+  }
+
+  .day-number {
+    font-size: 0.9rem;
+  }
+
+  .month-heading {
+    font-size: 1.15rem;
+  }
+
+  /* Outcome selector grid */
+  .outcome-buttons-group {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.4rem;
+  }
+
+  .outcome-btn {
+    padding: 0.55rem 0.45rem;
+    font-size: 0.76rem;
+    text-align: center;
+    min-height: 44px;
+  }
+
+  /* Today Action Card on Mobile */
+  .today-action-card {
+    padding: 1rem;
+  }
+
+  .today-action-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+  }
+
+  .today-action-header > div:last-child {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .today-confirm-btn,
+  .swap-btn,
+  .today-confirmed-badge {
+    width: 100%;
+    justify-content: center;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    min-height: 46px;
+  }
+
+  /* Sunday Emergency Card */
+  .sunday-emergency-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+  }
+
+  .btn-emergency {
+    width: 100%;
+    justify-content: center;
+    padding: 0.75rem 1rem;
+    min-height: 44px;
+  }
+
+  /* Modals */
+  .modal-overlay {
+    padding: 0.75rem;
+    align-items: flex-end;
+  }
+
+  .modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 1.25rem 1.15rem;
+    margin: 0;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+    gap: 0.5rem;
+  }
+
+  .modal-footer button {
+    width: 100%;
+    justify-content: center;
+    padding: 0.75rem 1rem;
+    min-height: 44px;
+  }
+
+  /* Form inputs mobile friendly */
+  .form-input, .form-select {
+    font-size: 16px; /* Prevents iOS auto-zoom */
+    min-height: 42px;
+  }
+
+  /* Toast Banner on Mobile */
+  .toast-banner {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Auth Lock Screen on Mobile */
+  .auth-screen-container {
+    padding: 1rem 0.75rem;
+  }
+
+  .auth-screen-box {
+    padding: 1.5rem 1.15rem;
+  }
+}
+
+/* Extra Small Mobile Screens (<= 480px, e.g. iPhone SE, Galaxy fold front) */
+@media (max-width: 480px) {
+  .main-content {
+    padding: 0.65rem 0.4rem;
+  }
+
+  .app-calendar-card {
+    padding: 0.85rem 0.35rem;
+  }
+
+  .attendance-days-grid {
+    gap: 3px;
+  }
+
+  .attendance-weekdays-row {
+    gap: 3px;
+  }
+
+  .day-box {
+    min-height: 38px;
+    max-height: 48px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+  }
+
+  .day-number {
+    font-size: 0.82rem;
+  }
+
+  .attendance-legend-bar {
+    gap: 0.35rem;
+    padding-top: 0.85rem;
+    margin-top: 0.85rem;
+  }
+
+  .legend-item {
+    font-size: 0.68rem;
+    padding: 0.2rem 0.45rem;
+  }
+
+  .outcome-buttons-group {
+    grid-template-columns: 1fr;
+  }
+
+  .past-record-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+
+  .past-record-item > button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal-content {
+    border-radius: 16px 16px 0 0 !important;
+    padding: 1.15rem 0.85rem;
+  }
+
+  .plan-actions-group button {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+}

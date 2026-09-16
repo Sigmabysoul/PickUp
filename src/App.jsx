@@ -439,10 +439,62 @@ export default function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span className="brand-title">PickUp</span>
               <span className="brand-badge">Overtime Dispatcher</span>
+        <div className="navbar-top-row">
+          <div className="nav-brand">
+            <div className="brand-icon">
+              <Truck size={20} />
             </div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
               {activeEmployeeCount} Active Staff · {data.warehouses.length} Warehouses
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span className="brand-title">PickUp</span>
+                <span className="brand-badge">Dispatcher</span>
+              </div>
+              <div className="brand-subtitle">
+                {activeEmployeeCount} Active Staff · {data.warehouses.length} Warehouses
+              </div>
             </div>
+          </div>
+
+          <div className="nav-actions">
+            {/* Senior Supervisor Profile Badge */}
+            <div className="senior-badge">
+              <ShieldCheck size={14} color="var(--accent-blue)" />
+              <span>{authUser?.name || 'Senior'}</span>
+            </div>
+
+            {/* Theme Switcher */}
+            <button
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun size={17} color="var(--accent-amber)" />
+              ) : (
+                <Moon size={17} color="var(--accent-blue)" />
+              )}
+            </button>
+
+            <button
+              className="btn btn-secondary btn-sm nav-btn-refresh"
+              onClick={fetchBootstrapData}
+              title="Refresh application data"
+            >
+              <RefreshCw size={13} className={loading ? 'spin' : ''} />
+              <span className="nav-btn-text">Refresh</span>
+            </button>
+
+            {/* Lock / Log Out Button */}
+            <button
+              className="btn btn-secondary btn-sm nav-btn-lock"
+              onClick={handleLogout}
+              title="Lock session and log out"
+            >
+              <LogOut size={13} />
+              <span className="nav-btn-text">Lock</span>
+            </button>
           </div>
         </div>
 
@@ -452,24 +504,32 @@ export default function App() {
             onClick={() => setActiveTab('calendar')}
           >
             <Calendar size={15} /> Calendar & Dispatch
+            <Calendar size={15} />
+            <span>Calendar & Dispatch</span>
           </button>
           <button
             className={`nav-tab ${activeTab === 'employees' ? 'active' : ''}`}
             onClick={() => setActiveTab('employees')}
           >
             <Users size={15} /> Employees & Availability
+            <Users size={15} />
+            <span>Employees</span>
           </button>
           <button
             className={`nav-tab ${activeTab === 'analytics' ? 'active' : ''}`}
             onClick={() => setActiveTab('analytics')}
           >
             <BarChart3 size={15} /> Fairness & Metrics
+            <BarChart3 size={15} />
+            <span>Fairness</span>
           </button>
           <button
             className={`nav-tab ${activeTab === 'warehouses' ? 'active' : ''}`}
             onClick={() => setActiveTab('warehouses')}
           >
             <Building2 size={15} /> Settings (Warehouses)
+            <Building2 size={15} />
+            <span>Settings</span>
           </button>
         </nav>
 

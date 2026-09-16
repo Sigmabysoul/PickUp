@@ -159,6 +159,7 @@ export default function WarehouseManager({
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
             gap: '1rem',
           }}
         >
@@ -304,6 +305,7 @@ export default function WarehouseManager({
                 style={{
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))',
                   gap: '0.75rem',
                   marginTop: '0.35rem',
                 }}
