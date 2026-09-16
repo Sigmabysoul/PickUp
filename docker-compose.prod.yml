@@ -1,0 +1,34 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgres://${POSTGRES_USER:-pickup}:${POSTGRES_PASSWORD:-pickup_prod_secure}@postgres:5432/${POSTGRES_DB:-pickup}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pickup}
+      POSTGRES_USER: ${POSTGRES_USER:-pickup}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pickup_prod_secure}
+    volumes:
+      - pickup_prod_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pickup} -d ${POSTGRES_DB:-pickup}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pickup_prod_pg:
+

@@ -1,0 +1,13 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pickup
+      POSTGRES_USER: pickup
+      POSTGRES_PASSWORD: pickup_local_only
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - pickup_pg:/var/lib/postgresql/data
+volumes:
+  pickup_pg:
