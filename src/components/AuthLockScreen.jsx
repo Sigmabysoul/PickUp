@@ -8,29 +8,25 @@ import {
   EyeOff,
   ArrowRight,
   Truck,
-  CheckCircle2,
 } from 'lucide-react';
 
 export default function AuthLockScreen({ onAuthenticated }) {
   const [passcode, setPasscode] = useState('');
   const [showPasscode, setShowPasscode] = useState(false);
   const [supervisors, setSupervisors] = useState([]);
-  const [selectedSupervisor, setSelectedSupervisor] = useState(null);
+  const [selectedSupervisor, setSelectedSupervisor] = useState('admin');
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [shake, setShake] = useState(false);
 
-  // Load supervisor profiles on mount
+  // Load active supervisor profiles on mount
   useEffect(() => {
     fetch('/api/auth/supervisors')
       .then((r) => r.json())
       .then((data) => {
         if (data.supervisors && Array.isArray(data.supervisors)) {
           setSupervisors(data.supervisors);
-          if (data.supervisors.length > 0) {
-            setSelectedSupervisor(data.supervisors[0].id);
-          }
         }
       })
       .catch(() => {
@@ -46,7 +42,7 @@ export default function AuthLockScreen({ onAuthenticated }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!passcode.trim()) {
-      setError('Please enter your senior passcode or PIN');
+      setError('Please enter your password or senior passcode');
       triggerShake();
       return;
     }
@@ -55,18 +51,20 @@ export default function AuthLockScreen({ onAuthenticated }) {
     setError(null);
 
     try {
+      const payload = { passcode: passcode.trim() };
+      if (selectedSupervisor && selectedSupervisor !== 'admin') {
+        payload.supervisorId = selectedSupervisor;
+      }
+
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          passcode: passcode.trim(),
-          supervisorId: selectedSupervisor,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Access denied. Incorrect passcode.');
+        throw new Error(data.error || 'Access denied. Incorrect password or passcode.');
       }
 
       // Store credentials according to remember me preference
@@ -160,71 +158,109 @@ export default function AuthLockScreen({ onAuthenticated }) {
 
         {/* Login Form */}
         <form onSubmit={handleSubmit}>
-          {/* Senior Profile Selector */}
-          {supervisors.length > 0 && (
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label
+          {/* Profile / Role Selector */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                marginBottom: '0.45rem',
+                color: 'var(--text-primary, #f8fafc)',
+              }}
+            >
+              Sign In As:
+            </label>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${Math.min(supervisors.length + 1, 3)}, 1fr)`,
+                gap: '0.5rem',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSupervisor('admin');
+                  setError(null);
+                }}
                 style={{
-                  display: 'block',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  marginBottom: '0.45rem',
-                  color: 'var(--text-primary, #f8fafc)',
+                  padding: '0.6rem 0.4rem',
+                  fontSize: '0.78rem',
+                  fontWeight: selectedSupervisor === 'admin' ? 700 : 500,
+                  backgroundColor: selectedSupervisor === 'admin'
+                    ? 'rgba(56, 189, 248, 0.18)'
+                    : 'var(--bg-surface-elevated, #1e293b)',
+                  border: selectedSupervisor === 'admin'
+                    ? '1.5px solid var(--accent-blue, #38bdf8)'
+                    : '1px solid var(--border-color, #334155)',
+                  color: selectedSupervisor === 'admin'
+                    ? 'var(--accent-blue, #38bdf8)'
+                    : 'var(--text-secondary, #94a3b8)',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease',
                 }}
               >
-                Select Your Senior Profile:
-              </label>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(${Math.min(supervisors.length, 3)}, 1fr)`,
-                  gap: '0.5rem',
-                }}
-              >
-                {supervisors.map((sup, idx) => {
-                  const isSelected = selectedSupervisor === sup.id;
-                  return (
-                    <button
-                      key={sup.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSupervisor(sup.id);
-                        setError(null);
-                      }}
+                <Lock
+                  size={14}
+                  style={{
+                    display: 'block',
+                    margin: '0 auto 0.25rem auto',
+                    opacity: selectedSupervisor === 'admin' ? 1 : 0.6,
+                  }}
+                />
+                Admin
+              </button>
+
+              {supervisors.map((sup) => {
+                const isSelected = selectedSupervisor === sup.id;
+                return (
+                  <button
+                    key={sup.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSupervisor(sup.id);
+                      setError(null);
+                    }}
+                    style={{
+                      padding: '0.6rem 0.4rem',
+                      fontSize: '0.78rem',
+                      fontWeight: isSelected ? 700 : 500,
+                      backgroundColor: isSelected
+                        ? 'rgba(56, 189, 248, 0.15)'
+                        : 'var(--bg-surface-elevated, #1e293b)',
+                      border: isSelected
+                        ? '1.5px solid var(--accent-blue, #38bdf8)'
+                        : '1px solid var(--border-color, #334155)',
+                      color: isSelected
+                        ? 'var(--accent-blue, #38bdf8)'
+                        : 'var(--text-secondary, #94a3b8)',
+                      borderRadius: '0.5rem',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      transition: 'all 0.15s ease',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={sup.name}
+                  >
+                    <UserCheck
+                      size={14}
                       style={{
-                        padding: '0.6rem 0.4rem',
-                        fontSize: '0.78rem',
-                        fontWeight: isSelected ? 700 : 500,
-                        backgroundColor: isSelected
-                          ? 'rgba(56, 189, 248, 0.15)'
-                          : 'var(--bg-surface-elevated, #1e293b)',
-                        border: isSelected
-                          ? '1.5px solid var(--accent-blue, #38bdf8)'
-                          : '1px solid var(--border-color, #334155)',
-                        color: isSelected
-                          ? 'var(--accent-blue, #38bdf8)'
-                          : 'var(--text-secondary, #94a3b8)',
-                        borderRadius: '0.5rem',
-                        cursor: 'pointer',
-                        textAlign: 'center',
-                        transition: 'all 0.15s ease',
+                        display: 'block',
+                        margin: '0 auto 0.25rem auto',
+                        opacity: isSelected ? 1 : 0.6,
                       }}
-                    >
-                      <UserCheck
-                        size={14}
-                        style={{
-                          display: 'block',
-                          margin: '0 auto 0.25rem auto',
-                          opacity: isSelected ? 1 : 0.6,
-                        }}
-                      />
-                      Senior {idx + 1}
-                    </button>
-                  );
-                })}
-              </div>
+                    />
+                    {sup.name}
+                  </button>
+                );
+              })}
             </div>
-          )}
+          </div>
 
           {/* Passcode Input */}
           <div style={{ marginBottom: '1.25rem' }}>
@@ -236,7 +272,9 @@ export default function AuthLockScreen({ onAuthenticated }) {
                   color: 'var(--text-primary, #f8fafc)',
                 }}
               >
-                Enter Access Passcode or PIN:
+                {selectedSupervisor === 'admin'
+                  ? 'Administrator Password:'
+                  : 'Senior Passcode / PIN:'}
               </label>
             </div>
 
@@ -261,7 +299,11 @@ export default function AuthLockScreen({ onAuthenticated }) {
                   setPasscode(e.target.value);
                   if (error) setError(null);
                 }}
-                placeholder="Enter 4-digit PIN or master passcode"
+                placeholder={
+                  selectedSupervisor === 'admin'
+                    ? 'Enter Admin Password'
+                    : 'Enter assigned senior passcode'
+                }
                 autoFocus
                 style={{
                   width: '100%',
@@ -373,21 +415,22 @@ export default function AuthLockScreen({ onAuthenticated }) {
           </button>
         </form>
 
-        {/* Quick hint for initial login */}
+        {/* Security Footer Note */}
         <div
           style={{
             marginTop: '1.5rem',
             paddingTop: '1rem',
             borderTop: '1px solid var(--border-color, #1e293b)',
             textAlign: 'center',
-            fontSize: '0.72rem',
+            fontSize: '0.75rem',
             color: 'var(--text-muted, #64748b)',
           }}
         >
-          Default Senior Passcode: <code style={{ color: 'var(--accent-blue, #38bdf8)' }}>pickup2026</code> · Or PINs: <code style={{ color: 'var(--accent-blue, #38bdf8)' }}>1234</code>, <code style={{ color: 'var(--accent-blue, #38bdf8)' }}>5678</code>, <code style={{ color: 'var(--accent-blue, #38bdf8)' }}>9999</code>
+          {selectedSupervisor === 'admin'
+            ? 'Administrator has full control to create and manage senior user passcodes'
+            : 'Authorized senior staff member · Secure dispatcher session'}
         </div>
       </div>
     </div>
   );
 }
-

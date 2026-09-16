@@ -110,6 +110,16 @@ CREATE TABLE IF NOT EXISTS daily_logs (
     CONSTRAINT daily_logs_wh_date_key UNIQUE (warehouse_id, duty_date)
 );
 
+CREATE TABLE IF NOT EXISTS app_users (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    passcode TEXT NOT NULL,
+    role TEXT DEFAULT 'senior' NOT NULL CHECK (role IN ('admin', 'senior')),
+    active BOOLEAN DEFAULT TRUE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
 INSERT INTO warehouses (name, active)
 VALUES ('Old Warehouse', true), ('New Warehouse', true)
 ON CONFLICT (name) DO NOTHING;

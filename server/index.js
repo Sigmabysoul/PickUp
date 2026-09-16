@@ -4,9 +4,10 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { computeEmployeeMetrics, selectOvertimeCrew } from './algorithm.js';
 import {
+  ADMIN_PASSWORD,
   generateToken,
   requireAuth,
-  SENIOR_SUPERVISORS,
+  requireAdmin,
   validateCredentials,
   verifyToken,
 } from './auth.js';
@@ -31,15 +32,28 @@ app.use((req, res, next) => {
 // --------------------------------------------------------------------------
 // 0. Authentication Routes for Senior Employees / Supervisors
 // --------------------------------------------------------------------------
-app.get('/api/auth/supervisors', (req, res) => {
-  res.json({
-    supervisors: SENIOR_SUPERVISORS.map((s) => ({ id: s.id, name: s.name })),
-  });
+app.get('/api/auth/supervisors', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, username, role FROM app_users WHERE active = true ORDER BY name ASC'
+    );
+    res.json({
+      supervisors: result.rows.map((u) => ({
+        id: String(u.id),
+        name: u.name,
+        username: u.username,
+        role: u.role,
+      })),
+    });
+  } catch (err) {
+    console.error('Error fetching supervisors:', err.message);
+    res.json({ supervisors: [] });
+  }
 });
 
-app.post('/api/auth/login', (req, res) => {
-  const { passcode, supervisorId, name } = req.body || {};
-  const result = validateCredentials({ passcode, supervisorId, name });
+app.post('/api/auth/login', async (req, res) => {
+  const { passcode, supervisorId, username, name } = req.body || {};
+  const result = await validateCredentials({ passcode, supervisorId, username, name, pool });
   if (!result.success) {
     return res.status(401).json({ error: result.message });
   }
@@ -71,8 +85,102 @@ app.get('/api/auth/verify', (req, res) => {
 // Protect all operational API endpoints with senior supervisor auth
 app.use('/api', requireAuth);
 
+// --------------------------------------------------------------------------
+// User & Password Management (Admin Only)
+// --------------------------------------------------------------------------
+app.get('/api/users', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, username, name, passcode, role, active, created_at FROM app_users ORDER BY id ASC'
+    );
+    res.json({ users: result.rows });
+  } catch (err) {
+    console.error('Error listing users:', err.message);
+    res.status(500).json({ error: 'Failed to retrieve users' });
+  }
+});
+
+app.post('/api/users', requireAdmin, async (req, res) => {
+  try {
+    const { username, name, passcode, role } = req.body || {};
+    if (!username || !username.trim()) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    if (!passcode || !passcode.trim()) {
+      return res.status(400).json({ error: 'Passcode / PIN is required' });
+    }
+
+    const cleanUsername = username.trim().toLowerCase();
+    const existing = await pool.query('SELECT id FROM app_users WHERE LOWER(username) = $1', [cleanUsername]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Username already exists. Please choose a different username.' });
+    }
+
+    const cleanRole = role === 'admin' ? 'admin' : 'senior';
+    const insertRes = await pool.query(
+      `INSERT INTO app_users (username, name, passcode, role, active)
+       VALUES ($1, $2, $3, $4, true)
+       RETURNING id, username, name, passcode, role, active, created_at`,
+      [cleanUsername, name.trim(), passcode.trim(), cleanRole]
+    );
+
+    res.status(201).json({ user: insertRes.rows[0] });
+  } catch (err) {
+    console.error('Error creating user:', err.message);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+app.put('/api/users/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, passcode, role, active } = req.body || {};
+
+    const existing = await pool.query('SELECT * FROM app_users WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const current = existing.rows[0];
+    const newName = name !== undefined ? String(name).trim() : current.name;
+    const newPasscode = passcode !== undefined ? String(passcode).trim() : current.passcode;
+    const newRole = role !== undefined ? (role === 'admin' ? 'admin' : 'senior') : current.role;
+    const newActive = active !== undefined ? Boolean(active) : current.active;
+
+    const updateRes = await pool.query(
+      `UPDATE app_users
+       SET name = $1, passcode = $2, role = $3, active = $4
+       WHERE id = $5
+       RETURNING id, username, name, passcode, role, active, created_at`,
+      [newName, newPasscode, newRole, newActive, id]
+    );
+
+    res.json({ user: updateRes.rows[0] });
+  } catch (err) {
+    console.error('Error updating user:', err.message);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+app.delete('/api/users/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const delRes = await pool.query('DELETE FROM app_users WHERE id = $1 RETURNING id', [id]);
+    if (delRes.rowCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting user:', err.message);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
 // Initialize DB schema on startup
-await initDb().catch((err) => {
+initDb().catch((err) => {
   console.error('Database initialization warning:', err.message);
 });
 

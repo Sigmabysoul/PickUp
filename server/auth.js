@@ -7,18 +7,10 @@ const AUTH_SECRET =
   process.env.DATABASE_URL ||
   'pickup-overtime-dispatcher-secure-key-2026';
 
-// Master supervisor passcode (configurable in Vercel / .env)
-export const MASTER_PASSCODE =
-  process.env.SUPERVISOR_PASSCODE ||
+// Admin password (user configured: 1877472806)
+export const ADMIN_PASSWORD =
   process.env.ADMIN_PASSWORD ||
-  'pickup2026';
-
-// Optional pre-configured senior supervisors (name + PIN)
-export const SENIOR_SUPERVISORS = [
-  { id: 'sup-1', name: 'Senior Supervisor 1', pin: process.env.SUPERVISOR_1_PIN || '1234' },
-  { id: 'sup-2', name: 'Senior Supervisor 2', pin: process.env.SUPERVISOR_2_PIN || '5678' },
-  { id: 'sup-3', name: 'Senior Supervisor 3', pin: process.env.SUPERVISOR_3_PIN || '9999' },
-];
+  '1877472806';
 
 /**
  * Creates an HMAC-SHA256 signed session token (valid for 30 days)
@@ -72,59 +64,75 @@ export function verifyToken(token) {
 }
 
 /**
- * Validates login credentials against either the Master Passcode or Senior Supervisor PINs
+ * Validates login credentials against either the Master Admin password or user accounts in the database
  */
-export function validateCredentials({ passcode, supervisorId, name }) {
-  if (!passcode) return { success: false, message: 'Passcode is required' };
+export async function validateCredentials({ passcode, username, supervisorId, pool }) {
+  if (!passcode) return { success: false, message: 'Passcode or password is required' };
 
-  // 1. Check if matching Master Passcode
-  if (passcode.trim() === MASTER_PASSCODE.trim()) {
+  const cleanPasscode = String(passcode).trim();
+
+  // 1. Check if matching Admin Password
+  if (cleanPasscode === ADMIN_PASSWORD.trim()) {
     return {
       success: true,
       user: {
-        id: supervisorId || 'master',
-        name: name || 'Senior Supervisor',
-        role: 'supervisor',
+        id: 'admin',
+        name: 'Administrator',
+        username: 'admin',
+        role: 'admin',
       },
     };
   }
 
-  // 2. Check if matching a specific senior supervisor PIN
-  if (supervisorId) {
-    const supervisor = SENIOR_SUPERVISORS.find((s) => s.id === supervisorId);
-    if (supervisor && supervisor.pin === passcode.trim()) {
-      return {
-        success: true,
-        user: {
-          id: supervisor.id,
-          name: supervisor.name,
-          role: 'supervisor',
-        },
-      };
+  // 2. Check against database users created by Admin
+  if (pool) {
+    try {
+      let userRow = null;
+
+      if (supervisorId) {
+        const res = await pool.query(
+          'SELECT * FROM app_users WHERE id = $1 AND active = true',
+          [supervisorId]
+        );
+        userRow = res.rows[0];
+      } else if (username) {
+        const res = await pool.query(
+          'SELECT * FROM app_users WHERE LOWER(username) = LOWER($1) AND active = true',
+          [username.trim()]
+        );
+        userRow = res.rows[0];
+      } else {
+        // Direct passcode lookup across active users
+        const res = await pool.query(
+          'SELECT * FROM app_users WHERE passcode = $1 AND active = true',
+          [cleanPasscode]
+        );
+        userRow = res.rows[0];
+      }
+
+      if (userRow && userRow.passcode === cleanPasscode) {
+        return {
+          success: true,
+          user: {
+            id: String(userRow.id),
+            name: userRow.name,
+            username: userRow.username,
+            role: userRow.role || 'senior',
+          },
+        };
+      }
+    } catch (err) {
+      console.error('Database auth validation error:', err.message);
     }
   }
 
-  // 3. Check any supervisor matching by PIN directly
-  const matchedSupervisor = SENIOR_SUPERVISORS.find((s) => s.pin === passcode.trim());
-  if (matchedSupervisor) {
-    return {
-      success: true,
-      user: {
-        id: matchedSupervisor.id,
-        name: matchedSupervisor.name,
-        role: 'supervisor',
-      },
-    };
-  }
-
-  return { success: false, message: 'Invalid supervisor passcode or PIN' };
+  return { success: false, message: 'Invalid admin password or senior employee credentials' };
 }
 
 /**
  * Express middleware enforcing authentication on protected API endpoints
  */
 export function requireAuth(req, res, next) {
-  // Extract token from header or query param
   let token = null;
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -138,7 +146,7 @@ export function requireAuth(req, res, next) {
   const user = verifyToken(token);
   if (!user) {
     return res.status(401).json({
-      error: 'Unauthorized: Complete access is restricted to senior employees. Please sign in.',
+      error: 'Unauthorized: Complete access is restricted. Please sign in.',
     });
   }
 
@@ -146,3 +154,14 @@ export function requireAuth(req, res, next) {
   next();
 }
 
+/**
+ * Express middleware enforcing Administrator access (for User Management)
+ */
+export function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({
+      error: 'Forbidden: Only the administrator can manage users and passwords.',
+    });
+  }
+  next();
+}

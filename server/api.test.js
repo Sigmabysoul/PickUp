@@ -47,6 +47,7 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     // Only clean up the isolated test fixtures created by this test run!
     // NEVER delete user or production data!
     try {
+      await pool.query("DELETE FROM app_users WHERE username LIKE '__test_%'");
       await pool.query("DELETE FROM absences WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
       await pool.query("UPDATE assignments SET replaces_assignment_id = NULL WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
       await pool.query("DELETE FROM assignments WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
@@ -78,17 +79,18 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     assert.equal(res.status, 401);
   });
 
-  await t.test('POST /api/auth/login authenticates senior supervisor and provides session token', async () => {
+  await t.test('POST /api/auth/login authenticates administrator with 1877472806 and provides session token', async () => {
     const res = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ passcode: 'pickup2026' }),
+      body: JSON.stringify({ passcode: '1877472806' }),
     });
     assert.equal(res.status, 200);
     const data = await res.json();
     assert.equal(data.success, true);
     assert.ok(data.token);
     assert.ok(data.user);
+    assert.equal(data.user.role, 'admin');
     authToken = data.token;
   });
 
@@ -275,5 +277,92 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     const csvText = await exportRes.text();
     assert.ok(csvText.includes('Monthly Overtime Duty Report'));
     assert.ok(csvText.includes('Duty Date'));
+  });
+
+  // --------------------------------------------------------------------------
+  // User & Password Management Tests (Admin Exclusive)
+  // --------------------------------------------------------------------------
+  let createdSeniorId = null;
+  let seniorToken = null;
+
+  await t.test('Admin can create a senior staff user via POST /api/users', async () => {
+    const res = await apiFetch(`${baseUrl}/api/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: '__test_senior_user__',
+        name: 'Test Senior Supervisor',
+        passcode: 'seniorpass123',
+        role: 'senior',
+      }),
+    });
+    assert.equal(res.status, 201);
+    const data = await res.json();
+    assert.ok(data.user);
+    assert.equal(data.user.username, '__test_senior_user__');
+    assert.equal(data.user.role, 'senior');
+    assert.equal(data.user.passcode, 'seniorpass123');
+    createdSeniorId = data.user.id;
+  });
+
+  await t.test('Created senior user can log in with their assigned passcode', async () => {
+    const res = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passcode: 'seniorpass123' }),
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.success, true);
+    assert.equal(data.user.role, 'senior');
+    assert.equal(data.user.name, 'Test Senior Supervisor');
+    seniorToken = data.token;
+  });
+
+  await t.test('Non-admin senior user is rejected with 403 when accessing GET /api/users', async () => {
+    const res = await fetch(`${baseUrl}/api/users`, {
+      headers: { Authorization: `Bearer ${seniorToken}` },
+    });
+    assert.equal(res.status, 403);
+    const data = await res.json();
+    assert.ok(data.error.includes('Only the administrator'));
+  });
+
+  await t.test('Admin can update senior user passcode via PUT /api/users/:id', async () => {
+    const res = await apiFetch(`${baseUrl}/api/users/${createdSeniorId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        passcode: 'updatedpass456',
+      }),
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.user.passcode, 'updatedpass456');
+
+    // Verify login with updated passcode
+    const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passcode: 'updatedpass456' }),
+    });
+    assert.equal(loginRes.status, 200);
+  });
+
+  await t.test('Admin can delete senior user via DELETE /api/users/:id', async () => {
+    const res = await apiFetch(`${baseUrl}/api/users/${createdSeniorId}`, {
+      method: 'DELETE',
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.success, true);
+
+    // Verify user can no longer log in
+    const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passcode: 'updatedpass456' }),
+    });
+    assert.equal(loginRes.status, 401);
   });
 });

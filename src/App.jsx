@@ -426,9 +426,28 @@ export default function App() {
 
           <div className="nav-actions">
             {/* Senior Supervisor Profile Badge */}
+            {/* Senior / Admin Profile Badge */}
             <div className="senior-badge">
               <ShieldCheck size={14} color="var(--accent-blue)" />
+              <ShieldCheck size={14} color={authUser?.role === 'admin' ? 'var(--accent-amber, #eab308)' : 'var(--accent-blue)'} />
               <span>{authUser?.name || 'Senior'}</span>
+              {authUser?.role === 'admin' && (
+                <span
+                  style={{
+                    backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                    color: 'var(--accent-amber, #eab308)',
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    marginLeft: '4px',
+                    letterSpacing: '0.03em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Admin
+                </span>
+              )}
             </div>
 
             {/* Theme Switcher */}
@@ -557,6 +576,8 @@ export default function App() {
               employees={data.employees}
               assignments={data.assignments}
               dailyLogs={data.dailyLogs || []}
+              authUser={authUser}
+              authFetch={authFetch}
               onAddWarehouse={handleAddWarehouse}
               onUpdateWarehouse={handleUpdateWarehouse}
             />
