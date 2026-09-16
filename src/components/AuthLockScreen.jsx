@@ -94,24 +94,35 @@ export default function AuthLockScreen({ onAuthenticated }) {
         <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
           <div
             style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '14px',
-              backgroundColor: 'rgba(56, 189, 248, 0.12)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
+              width: '64px',
+              height: '64px',
+              borderRadius: '18px',
+              background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.25))',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              boxShadow: '0 0 25px rgba(56, 189, 248, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2)',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--accent-blue, #38bdf8)',
+              color: '#38bdf8',
               marginBottom: '1rem',
             }}
           >
-            <Lock size={26} />
+            <Lock size={28} />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-            <Truck size={18} color="var(--accent-blue, #38bdf8)" />
-            <h2 style={{ fontSize: '1.35rem', fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+            <Truck size={20} color="var(--accent-blue, #38bdf8)" />
+            <h2
+              style={{
+                fontSize: '1.45rem',
+                fontWeight: 900,
+                letterSpacing: '-0.02em',
+                margin: 0,
+                background: 'linear-gradient(135deg, #38bdf8, #818cf8, #c084fc)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
               PickUp Security Gate
             </h2>
           </div>

@@ -711,7 +711,8 @@ export default function CalendarView({
             <div className="today-action-card">
               <div className="today-action-header">
                 <div>
-                  <h4 style={{ fontWeight: 800, fontSize: '1.05rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <h4 style={{ fontWeight: 800, fontSize: '1.05rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                    <span className="legend-dot dot-overtime" style={{ animation: 'liveBeacon 1.8s infinite', boxShadow: '0 0 10px #22c55e', width: '10px', height: '10px' }} />
                     <Sparkles size={18} color="var(--accent-blue)" />
                     Today's Overtime Crew (1 Old + 1 New)
                   </h4>
