@@ -58,6 +58,7 @@ export default function CalendarView({
   // Loading & Feedback states
   const [isConfirmingToday, setIsConfirmingToday] = useState(false);
   const [isSwapping, setIsSwapping] = useState(false);
+  const [mobileTab, setMobileTab] = useState('today'); // 'today' | 'calendar'
   const [toastMessage, setToastMessage] = useState(null);
 
   const showToast = (msg) => {
@@ -315,11 +316,36 @@ export default function CalendarView({
     activeTodayWorkers[0].home_warehouse_name === activeTodayWorkers[1].home_warehouse_name;
 
   return (
-    <div className="dashboard-split-layout">
-      {/* =========================================================================
-          LEFT SIDE: AESTHETIC ATTENDANCE CALENDAR (MATCHING USER SCREENSHOT)
-          ========================================================================= */}
-      <div className="calendar-left-col">
+    <div className="calendar-view-container">
+      {/* Mobile Top Segmented Mode Switcher (Visible on <= 768px only) */}
+      <div className="mobile-calendar-mode-bar">
+        <button
+          type="button"
+          className={`mobile-calendar-mode-btn ${mobileTab === 'today' ? 'active' : ''}`}
+          onClick={() => {
+            setMobileTab('today');
+            setSelectedDateStr(todayStr);
+          }}
+        >
+          <span className="legend-dot dot-overtime" style={{ animation: 'liveBeacon 1.8s infinite', width: '8px', height: '8px' }} />
+          <span>⚡ Today's Dispatch</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-calendar-mode-btn ${mobileTab === 'calendar' ? 'active' : ''}`}
+          onClick={() => setMobileTab('calendar')}
+        >
+          <CalendarIcon size={15} />
+          <span>📅 Month Calendar</span>
+        </button>
+      </div>
+
+      <div className={`dashboard-split-layout ${mobileTab === 'today' ? 'mobile-mode-today' : 'mobile-mode-calendar'}`}>
+        {/* =========================================================================
+            LEFT SIDE: AESTHETIC ATTENDANCE CALENDAR (MATCHING USER SCREENSHOT)
+            ========================================================================= */}
+        <div className="calendar-left-col">
         <div className="card app-calendar-card">
           {/* Header Bar */}
           <div className="attendance-header-bar">
@@ -1070,8 +1096,37 @@ export default function CalendarView({
               </button>
             </div>
           )}
+
+          {/* Mobile Switch Footer Button */}
+          <div className="mobile-calendar-switch-footer">
+            {mobileTab === 'today' ? (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ width: '100%', justifyContent: 'center', minHeight: '44px', gap: '0.5rem', marginTop: '1rem' }}
+                onClick={() => setMobileTab('calendar')}
+              >
+                <CalendarIcon size={16} />
+                <span>Switch to Month Calendar Grid</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ width: '100%', justifyContent: 'center', minHeight: '44px', gap: '0.5rem', marginTop: '1rem' }}
+                onClick={() => {
+                  setMobileTab('today');
+                  setSelectedDateStr(todayStr);
+                }}
+              >
+                <span className="legend-dot dot-overtime" style={{ width: '8px', height: '8px' }} />
+                <span>Jump back to Today's Crew</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
+    </div>
 
       {/* =========================================================================
           SAME-PAGE MODAL: MARK ABSENT / SICK & AUTO-SELECT REPLACEMENT

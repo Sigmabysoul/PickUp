@@ -571,6 +571,53 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation Bar (Thumb-Friendly, Fixed Bottom) */}
+      <nav className="mobile-bottom-bar" aria-label="Mobile Navigation">
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'calendar' ? 'active' : ''}`}
+          onClick={() => setActiveTab('calendar')}
+        >
+          <div className="mobile-nav-icon-pod">
+            <Calendar size={19} />
+          </div>
+          <span>Dispatch</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'employees' ? 'active' : ''}`}
+          onClick={() => setActiveTab('employees')}
+        >
+          <div className="mobile-nav-icon-pod">
+            <Users size={19} />
+          </div>
+          <span>Staff</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
+          onClick={() => setActiveTab('analytics')}
+        >
+          <div className="mobile-nav-icon-pod">
+            <BarChart3 size={19} />
+          </div>
+          <span>Equity</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'warehouses' ? 'active' : ''}`}
+          onClick={() => setActiveTab('warehouses')}
+        >
+          <div className="mobile-nav-icon-pod">
+            <Building2 size={19} />
+          </div>
+          <span>Settings</span>
+        </button>
+      </nav>
     </div>
   );
 }

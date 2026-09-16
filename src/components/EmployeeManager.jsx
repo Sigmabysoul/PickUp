@@ -189,8 +189,8 @@ export default function EmployeeManager({
           </div>
         </div>
 
-        {/* Employees Table */}
-        <div className="table-responsive">
+        {/* Desktop Employees Table (Hidden on Mobile <= 768px) */}
+        <div className="desktop-table-container table-responsive">
           <table className="data-table">
             <thead>
               <tr>
@@ -324,6 +324,117 @@ export default function EmployeeManager({
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Employee Cards List (Rendered on Mobile <= 768px) */}
+        <div className="mobile-employee-cards-list">
+          {filteredEmployees.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+              No employees matching filter criteria.
+            </div>
+          ) : (
+            filteredEmployees.map((emp) => {
+              const empAbsences = absences.filter(
+                (ab) =>
+                  String(ab.employee_id) === String(emp.id) &&
+                  ab.ends_on >= todayStr
+              );
+              const isOnLeave = empAbsences.length > 0;
+              const badgeClass =
+                emp.experience === 'Senior'
+                  ? 'badge-senior'
+                  : emp.experience === 'Mid'
+                  ? 'badge-mid'
+                  : 'badge-junior';
+
+              return (
+                <div key={emp.id} className="mobile-emp-card">
+                  {/* Card Header: Name & Seniority */}
+                  <div className="mobile-emp-header">
+                    <div>
+                      <div className="mobile-emp-name">{emp.name}</div>
+                      <div className="mobile-emp-sub">
+                        <span>{emp.warehouse_name || 'Unassigned'}</span>
+                        <span>•</span>
+                        <span>Skill {emp.skill}/5 {emp.skill >= 4 ? '(Lead)' : emp.skill <= 2 ? '(Junior)' : '(Mid)'}</span>
+                      </div>
+                    </div>
+                    <span className={`badge ${badgeClass}`}>
+                      {emp.experience}
+                    </span>
+                  </div>
+
+                  {/* Badges & Stats */}
+                  <div className="mobile-emp-stats-row">
+                    <span className="mobile-emp-stat-pill">
+                      🔥 {emp.completedCount || 0} completed stays
+                    </span>
+                    {isOnLeave && (
+                      <span className="mobile-emp-leave-pill" title={`${empAbsences[0].reason} (${empAbsences[0].starts_on} to ${empAbsences[0].ends_on})`}>
+                        <CalendarOff size={11} /> On Leave
+                      </span>
+                    )}
+                    {emp.hasMissedPriority && (
+                      <span className="badge badge-priority" style={{ animation: 'pulseGlow 2s infinite' }}>
+                        <Star size={10} /> Queued Priority
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Actions Row */}
+                  <div className="mobile-emp-actions-row">
+                    <button
+                      className={`btn btn-sm ${emp.active ? 'btn-success' : 'btn-danger'}`}
+                      onClick={() => handleToggleActive(emp)}
+                      style={{ flex: 1.2, minHeight: '40px', justifyContent: 'center' }}
+                      title="Toggle active status"
+                    >
+                      {emp.active ? (
+                        <>
+                          <CheckCircle size={13} /> Active
+                        </>
+                      ) : (
+                        <>
+                          <XCircle size={13} /> Disabled
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => openAbsenceModalForEmp(emp)}
+                      style={{ minHeight: '40px', padding: '0 0.85rem' }}
+                      title="Log vacation or leave"
+                    >
+                      <CalendarOff size={14} /> Leave
+                    </button>
+
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => openEditEmployeeModal(emp)}
+                      style={{ minHeight: '40px', padding: '0 0.85rem' }}
+                      title="Edit employee"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => {
+                        if (window.confirm(`Archive ${emp.name}? Duty history will remain intact.`)) {
+                          onDeleteEmployee(emp.id);
+                        }
+                      }}
+                      style={{ minHeight: '40px', padding: '0 0.85rem' }}
+                      title="Archive employee"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* Absences / Scheduled Leaves Table */}
@@ -337,37 +448,63 @@ export default function EmployeeManager({
         {absences.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No absence periods logged.</p>
         ) : (
-          <div className="table-responsive">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Start Date</th>
-                  <th>End Date</th>
-                  <th>Reason</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {absences.map((ab) => (
-                  <tr key={ab.id}>
-                    <td style={{ fontWeight: 600 }}>{ab.employee_name}</td>
-                    <td>{ab.starts_on}</td>
-                    <td>{ab.ends_on}</td>
-                    <td>{ab.reason || 'Not specified'}</td>
-                    <td>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => onDeleteAbsence(ab.id)}
-                      >
-                        <Trash2 size={12} /> Remove
-                      </button>
-                    </td>
+          <>
+            <div className="desktop-table-container table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Reason</th>
+                    <th>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {absences.map((ab) => (
+                    <tr key={ab.id}>
+                      <td style={{ fontWeight: 600 }}>{ab.employee_name}</td>
+                      <td>{ab.starts_on}</td>
+                      <td>{ab.ends_on}</td>
+                      <td>{ab.reason || 'Not specified'}</td>
+                      <td>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => onDeleteAbsence(ab.id)}
+                        >
+                          <Trash2 size={12} /> Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Absences Cards */}
+            <div className="mobile-absence-cards-list">
+              {absences.map((ab) => (
+                <div key={ab.id} className="mobile-absence-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{ab.employee_name}</span>
+                    <span className="badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
+                      {ab.reason || 'Vacation'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Clock size={13} /> {ab.starts_on} → {ab.ends_on}
+                  </div>
+                  <button
+                    className="btn btn-danger btn-sm"
+                    style={{ width: '100%', justifyContent: 'center', minHeight: '38px', marginTop: '0.35rem' }}
+                    onClick={() => onDeleteAbsence(ab.id)}
+                  >
+                    <Trash2 size={13} /> Remove Absence
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

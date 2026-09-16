@@ -1893,6 +1893,31 @@ button {
   flex-wrap: wrap;
 }
 
+/* Base Mobile-Responsive Component Defaults (Hidden on Desktop) */
+.mobile-bottom-bar {
+  display: none;
+}
+
+.mobile-calendar-mode-bar {
+  display: none;
+}
+
+.mobile-calendar-switch-footer {
+  display: none;
+}
+
+.desktop-table-container {
+  display: block;
+}
+
+.mobile-employee-cards-list {
+  display: none;
+}
+
+.mobile-absence-cards-list {
+  display: none;
+}
+
 /* =========================================================================
    RESPONSIVE DESIGN & MOBILE OPTIMIZATIONS (TABLETS & PHONES: <= 768px)
    ========================================================================= */
@@ -1914,7 +1939,7 @@ button {
     flex-direction: column;
     align-items: stretch;
     padding: 0.65rem 0.85rem;
-    gap: 0.65rem;
+    gap: 0;
   }
 
   .navbar-top-row {
@@ -1976,30 +2001,239 @@ button {
     justify-content: center;
   }
 
-  /* Horizontal swipeable tab bar */
-  .nav-tabs {
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding: 0.25rem;
-    gap: 0.25rem;
+  /* Hide top tab bar on mobile (handled by thumb-friendly bottom bar) */
+  .navbar .nav-tabs {
+    display: none !important;
   }
 
-  .nav-tabs::-webkit-scrollbar {
-    display: none;
+  /* Mobile Bottom Navigation Bar (Fixed Bottom) */
+  .mobile-bottom-bar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(62px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: rgba(10, 14, 23, 0.94);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(56, 189, 248, 0.22);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.55), 0 0 20px rgba(56, 189, 248, 0.08);
+    z-index: 1000;
+    justify-content: space-around;
+    align-items: center;
   }
 
-  .nav-tab {
-    padding: 0.45rem 0.75rem;
-    font-size: 0.8rem;
-    white-space: nowrap;
-    flex-shrink: 0;
+  [data-theme="light"] .mobile-bottom-bar {
+    background: rgba(255, 255, 255, 0.95);
+    border-top-color: rgba(203, 213, 225, 0.85);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
   }
 
-  /* Main Container Padding */
+  .mobile-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.35rem 0.2rem;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    min-height: 48px;
+  }
+
+  .mobile-nav-item:active {
+    transform: scale(0.94);
+  }
+
+  .mobile-nav-item.active {
+    color: var(--accent-blue);
+  }
+
+  .mobile-nav-icon-pod {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 28px;
+    border-radius: 999px;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-nav-item.active .mobile-nav-icon-pod {
+    background: rgba(56, 189, 248, 0.18);
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+    color: #38bdf8;
+  }
+
+  /* Main Container Padding Clearance for Bottom Bar */
   .main-content {
-    padding: 1rem 0.75rem;
+    padding: 0.85rem 0.75rem;
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Mobile Calendar Mode Switcher */
+  .mobile-calendar-mode-bar {
+    display: flex;
+    gap: 0.4rem;
+    background: var(--bg-surface-elevated);
+    padding: 0.3rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    margin-bottom: 0.85rem;
+  }
+
+  .mobile-calendar-mode-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.65rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.86rem;
+    font-weight: 800;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    min-height: 42px;
+  }
+
+  .mobile-calendar-mode-btn.active {
+    background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
+  }
+
+  .mobile-calendar-mode-btn:active {
+    transform: scale(0.97);
+  }
+
+  .dashboard-split-layout.mobile-mode-today .calendar-left-col {
+    display: none !important;
+  }
+
+  .dashboard-split-layout.mobile-mode-calendar .inspector-right-col {
+    margin-top: 1rem;
+  }
+
+  .mobile-calendar-switch-footer {
+    display: block;
+    margin-top: 1rem;
+  }
+
+  /* Mobile Employee & Absence Cards */
+  .desktop-table-container {
+    display: none !important;
+  }
+
+  .mobile-employee-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .mobile-emp-card {
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+  }
+
+  .mobile-emp-card:hover {
+    border-color: rgba(56, 189, 248, 0.35);
+  }
+
+  .mobile-emp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .mobile-emp-name {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .mobile-emp-sub {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .mobile-emp-stats-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .mobile-emp-stat-pill {
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: rgba(56, 189, 248, 0.1);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    padding: 0.22rem 0.6rem;
+    border-radius: 999px;
+  }
+
+  .mobile-emp-leave-pill {
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    padding: 0.22rem 0.6rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .mobile-emp-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .mobile-absence-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .mobile-absence-card {
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   }
 
   /* Card paddings */
