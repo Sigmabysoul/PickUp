@@ -3,6 +3,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { computeEmployeeMetrics, selectOvertimeCrew } from './algorithm.js';
+import {
+  generateToken,
+  requireAuth,
+  SENIOR_SUPERVISORS,
+  validateCredentials,
+  verifyToken,
+} from './auth.js';
 import { initDb, pool } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,6 +27,49 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// --------------------------------------------------------------------------
+// 0. Authentication Routes for Senior Employees / Supervisors
+// --------------------------------------------------------------------------
+app.get('/api/auth/supervisors', (req, res) => {
+  res.json({
+    supervisors: SENIOR_SUPERVISORS.map((s) => ({ id: s.id, name: s.name })),
+  });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const { passcode, supervisorId, name } = req.body || {};
+  const result = validateCredentials({ passcode, supervisorId, name });
+  if (!result.success) {
+    return res.status(401).json({ error: result.message });
+  }
+
+  const token = generateToken(result.user);
+  res.json({
+    success: true,
+    token,
+    user: result.user,
+  });
+});
+
+app.get('/api/auth/verify', (req, res) => {
+  let token = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if (req.headers['x-auth-token']) {
+    token = req.headers['x-auth-token'];
+  }
+
+  const user = verifyToken(token);
+  if (!user) {
+    return res.status(401).json({ valid: false, error: 'Session expired or invalid' });
+  }
+  res.json({ valid: true, user });
+});
+
+// Protect all operational API endpoints with senior supervisor auth
+app.use('/api', requireAuth);
 
 // Initialize DB schema on startup
 await initDb().catch((err) => {

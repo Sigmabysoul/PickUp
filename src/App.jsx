@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Calendar,
   Sparkles,
@@ -9,17 +10,35 @@ import {
   RefreshCw,
   Sun,
   Moon,
+  ShieldCheck,
+  LogOut,
+  Lock,
 } from 'lucide-react';
 import CalendarView from './components/CalendarView.jsx';
 import PlanGenerator from './components/PlanGenerator.jsx';
 import EmployeeManager from './components/EmployeeManager.jsx';
 import WarehouseManager from './components/WarehouseManager.jsx';
 import FairnessAnalytics from './components/FairnessAnalytics.jsx';
+import AuthLockScreen from './components/AuthLockScreen.jsx';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('calendar');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Senior Supervisor Authentication State
+  const [authToken, setAuthToken] = useState(() => {
+    return localStorage.getItem('pickup_auth_token') || sessionStorage.getItem('pickup_auth_token') || null;
+  });
+  const [authUser, setAuthUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem('pickup_auth_user') || sessionStorage.getItem('pickup_auth_user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isVerifyingAuth, setIsVerifyingAuth] = useState(Boolean(authToken));
 
   // Theme Management: Defaults to dark (prioritizing true blacks), with full light mode
   const [theme, setTheme] = useState(() => {
@@ -34,6 +53,65 @@ export default function App() {
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('pickup_auth_token');
+    localStorage.removeItem('pickup_auth_user');
+    sessionStorage.removeItem('pickup_auth_token');
+    sessionStorage.removeItem('pickup_auth_user');
+    setAuthToken(null);
+    setAuthUser(null);
+    setData({
+      warehouses: [],
+      employees: [],
+      absences: [],
+      assignments: [],
+      dailyRequirements: [],
+      runs: [],
+    });
+  }, []);
+
+  // Verify stored session token on startup
+  useEffect(() => {
+    if (!authToken) {
+      setIsVerifyingAuth(false);
+      return;
+    }
+
+    fetch('/api/auth/verify', {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        if (!res.valid) {
+          handleLogout();
+        } else if (res.user) {
+          setAuthUser(res.user);
+        }
+      })
+      .catch(() => {
+        // Allow session persistence if offline
+      })
+      .finally(() => {
+        setIsVerifyingAuth(false);
+      });
+  }, [authToken, handleLogout]);
+
+  // Authenticated fetch wrapper passing Bearer token
+  const authFetch = useCallback(
+    async (url, options = {}) => {
+      const headers = { ...(options.headers || {}) };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      const res = await fetch(url, { ...options, headers });
+      if (res.status === 401 && !url.includes('/api/auth/')) {
+        handleLogout();
+      }
+      return res;
+    },
+    [authToken, handleLogout]
+  );
 
   // App Data
   const [data, setData] = useState({
@@ -50,9 +128,12 @@ export default function App() {
   const [generatorWarehouseId, setGeneratorWarehouseId] = useState(null);
 
   const fetchBootstrapData = async () => {
+  const fetchBootstrapData = useCallback(async () => {
+    if (!authToken) return;
     try {
       setLoading(true);
       const res = await fetch('/api/bootstrap');
+      const res = await authFetch('/api/bootstrap');
       if (!res.ok) {
         let details = '';
         try {
@@ -73,15 +154,21 @@ export default function App() {
       setLoading(false);
     }
   };
+  }, [authToken, authFetch]);
 
   useEffect(() => {
     fetchBootstrapData();
   }, []);
+    if (authToken && !isVerifyingAuth) {
+      fetchBootstrapData();
+    }
+  }, [authToken, isVerifyingAuth, fetchBootstrapData]);
 
   // Handlers
   const handleUpdateAssignmentStatus = async (id, status) => {
     try {
       const res = await fetch(`/api/assignments/${id}`, {
+      const res = await authFetch(`/api/assignments/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -105,6 +192,7 @@ export default function App() {
   const handleUpdateDailyStatus = async (warehouse_id, duty_date, status, notes = '') => {
     try {
       const res = await fetch('/api/daily-status', {
+      const res = await authFetch('/api/daily-status', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ warehouse_id, duty_date, status, notes }),
@@ -121,6 +209,7 @@ export default function App() {
 
   const handleSaveRequirement = async (warehouse_id, duty_date, worker_count) => {
     await fetch('/api/requirements', {
+    await authFetch('/api/requirements', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ warehouse_id, duty_date, worker_count }),
@@ -129,6 +218,7 @@ export default function App() {
 
   const handleReportAbsence = async (assignment_id, reason) => {
     const res = await fetch('/api/assignments/report-absence', {
+    const res = await authFetch('/api/assignments/report-absence', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ assignment_id, reason }),
@@ -141,6 +231,7 @@ export default function App() {
 
   const handleConfirmToday = async (duty_date) => {
     const res = await fetch('/api/assignments/confirm-today', {
+    const res = await authFetch('/api/assignments/confirm-today', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ duty_date }),
@@ -153,6 +244,7 @@ export default function App() {
 
   const handleSwapWarehouses = async (duty_date) => {
     const res = await fetch('/api/assignments/swap', {
+    const res = await authFetch('/api/assignments/swap', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ duty_date }),
@@ -165,6 +257,7 @@ export default function App() {
 
   const handleLogHistoricalPickup = async ({ employee_id, warehouse_id, duty_date }) => {
     const res = await fetch('/api/historical-pickup', {
+    const res = await authFetch('/api/historical-pickup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ employee_id, warehouse_id, duty_date }),
@@ -177,6 +270,7 @@ export default function App() {
 
   const handleDeleteHistoricalPickup = async (id) => {
     const res = await fetch(`/api/historical-pickup/${id}`, { method: 'DELETE' });
+    const res = await authFetch(`/api/historical-pickup/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || 'Failed to delete historical pickup');
     await fetchBootstrapData();
@@ -185,6 +279,7 @@ export default function App() {
 
   const handleToggleEmergencySunday = async (duty_date, enabled) => {
     const res = await fetch('/api/daily-status/emergency-sunday', {
+    const res = await authFetch('/api/daily-status/emergency-sunday', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ duty_date, enabled }),
@@ -197,6 +292,7 @@ export default function App() {
 
   const handleGeneratePlan = async ({ duty_date, warehouse_id, dry_run }) => {
     const res = await fetch('/api/generate', {
+    const res = await authFetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ duty_date, warehouse_id, dry_run }),
@@ -211,6 +307,7 @@ export default function App() {
 
   const handleAddEmployee = async (formData) => {
     const res = await fetch('/api/employees', {
+    const res = await authFetch('/api/employees', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formData),
@@ -224,6 +321,7 @@ export default function App() {
 
   const handleUpdateEmployee = async (id, formData) => {
     const res = await fetch(`/api/employees/${id}`, {
+    const res = await authFetch(`/api/employees/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formData),
@@ -237,12 +335,14 @@ export default function App() {
 
   const handleDeleteEmployee = async (id) => {
     const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+    const res = await authFetch(`/api/employees/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to archive employee');
     await fetchBootstrapData();
   };
 
   const handleAddAbsence = async (formData) => {
     const res = await fetch('/api/absences', {
+    const res = await authFetch('/api/absences', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formData),
@@ -256,12 +356,14 @@ export default function App() {
 
   const handleDeleteAbsence = async (id) => {
     const res = await fetch(`/api/absences/${id}`, { method: 'DELETE' });
+    const res = await authFetch(`/api/absences/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to remove absence');
     await fetchBootstrapData();
   };
 
   const handleAddWarehouse = async (formData) => {
     const res = await fetch('/api/warehouses', {
+    const res = await authFetch('/api/warehouses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formData),
@@ -275,6 +377,7 @@ export default function App() {
 
   const handleUpdateWarehouse = async (id, formData) => {
     const res = await fetch(`/api/warehouses/${id}`, {
+    const res = await authFetch(`/api/warehouses/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formData),
@@ -285,6 +388,42 @@ export default function App() {
     }
     await fetchBootstrapData();
   };
+
+  // Gate 1: If verifying authentication token on startup, show loading state
+  if (isVerifyingAuth) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'var(--bg-app, #030712)',
+        }}
+      >
+        <div style={{ textAlign: 'center', color: 'var(--text-secondary, #94a3b8)' }}>
+          <RefreshCw
+            size={28}
+            className="spin"
+            style={{ margin: '0 auto 0.75rem auto', display: 'block', color: 'var(--accent-blue, #38bdf8)' }}
+          />
+          <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>Verifying Senior Credentials...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Gate 2: If unauthenticated, show restricted lock screen
+  if (!authToken) {
+    return (
+      <AuthLockScreen
+        onAuthenticated={(user, token) => {
+          setAuthUser(user);
+          setAuthToken(token);
+        }}
+      />
+    );
+  }
 
   const activeEmployeeCount = data.employees.filter((e) => e.active).length;
 
@@ -335,6 +474,24 @@ export default function App() {
         </nav>
 
         <div className="nav-actions">
+          {/* Senior Supervisor Profile Badge */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              backgroundColor: 'rgba(56, 189, 248, 0.1)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              padding: '0.35rem 0.65rem',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            <ShieldCheck size={14} color="var(--accent-blue)" />
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent-blue)' }}>
+              {authUser?.name || 'Senior Access'}
+            </span>
+          </div>
+
           {/* Theme Switcher */}
           <button
             className="theme-toggle-btn"
@@ -354,6 +511,16 @@ export default function App() {
             title="Refresh application data"
           >
             <RefreshCw size={13} className={loading ? 'spin' : ''} /> Refresh
+          </button>
+
+          {/* Lock / Log Out Button */}
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleLogout}
+            title="Lock session and log out"
+            style={{ gap: '0.35rem', borderColor: 'rgba(239, 68, 68, 0.3)', color: 'var(--accent-red)' }}
+          >
+            <LogOut size={13} /> Lock
           </button>
         </div>
       </header>
