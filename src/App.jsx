@@ -53,7 +53,16 @@ export default function App() {
     try {
       setLoading(true);
       const res = await fetch('/api/bootstrap');
-      if (!res.ok) throw new Error(`Bootstrap failed: ${res.statusText}`);
+      if (!res.ok) {
+        let details = '';
+        try {
+          const errData = await res.json();
+          details = errData.error || JSON.stringify(errData);
+        } catch (_) {
+          details = await res.text().catch(() => '');
+        }
+        throw new Error(`Bootstrap failed (${res.status}${res.statusText ? ' ' + res.statusText : ''}): ${details || 'Unable to reach backend API'}`);
+      }
       const json = await res.json();
       setData(json);
       setError(null);

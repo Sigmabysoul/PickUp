@@ -13,6 +13,14 @@ const PORT = process.env.PORT || 3001;
 
 app.use(express.json());
 
+// Normalization middleware for proxy / serverless environments
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/api') && !req.url.startsWith('/assets') && !req.url.includes('.')) {
+    req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+  }
+  next();
+});
+
 // Initialize DB schema on startup
 await initDb().catch((err) => {
   console.error('Database initialization warning:', err.message);
@@ -34,9 +42,28 @@ function isEmployeeAbsentOnDate(absences, employeeId, dutyDate) {
 // --------------------------------------------------------------------------
 app.get('/api/bootstrap', async (req, res) => {
   try {
-    const warehousesRes = await pool.query(
-      'SELECT id, name, active FROM warehouses ORDER BY name'
-    );
+    if (!process.env.DATABASE_URL && (process.env.VERCEL || process.env.NODE_ENV === 'production')) {
+      return res.status(500).json({
+        error: 'DATABASE_URL is missing in environment variables. Please add your Neon connection string in your Vercel Project Settings (Settings -> Environment Variables).'
+      });
+    }
+
+    let warehousesRes;
+    try {
+      warehousesRes = await pool.query(
+        'SELECT id, name, active FROM warehouses ORDER BY name'
+      );
+    } catch (dbErr) {
+      if (dbErr.code === '42P01') {
+        // Table doesn't exist yet on new database, run initDb to create tables
+        await initDb();
+        warehousesRes = await pool.query(
+          'SELECT id, name, active FROM warehouses ORDER BY name'
+        );
+      } else {
+        throw dbErr;
+      }
+    }
     const employeesRes = await pool.query(
       `SELECT e.id, e.warehouse_id, e.name, e.experience, e.skill, e.active, e.created_at, w.name as warehouse_name
        FROM employees e
