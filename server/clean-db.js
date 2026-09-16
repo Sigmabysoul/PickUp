@@ -11,8 +11,10 @@ export async function cleanDb() {
     await client.query('DELETE FROM absences');
     await client.query('DELETE FROM daily_logs');
     await client.query('DELETE FROM daily_requirements');
-    await client.query('DELETE FROM employees');
-    await client.query('ALTER TABLE employees ALTER COLUMN id RESTART WITH 1');
+    if (process.env.FORCE_DELETE_EMPLOYEES === 'true') {
+      await client.query('DELETE FROM employees');
+      await client.query('ALTER TABLE employees ALTER COLUMN id RESTART WITH 1');
+    }
 
     // Ensure the 2 primary warehouses exist
     await client.query(`

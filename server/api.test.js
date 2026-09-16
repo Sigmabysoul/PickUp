@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import test from 'node:test';
 import { pool } from './db.js';
-import { cleanDb } from './clean-db.js';
 import app from './index.js';
 
 let server;
@@ -21,28 +20,44 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     });
   });
 
-  // Clean DB first to start with known state
-  await cleanDb();
+  // Ensure standard test warehouses exist without altering existing data
+  await pool.query(`
+    INSERT INTO warehouses (name, active)
+    VALUES ('Old Warehouse', true), ('New Warehouse', true)
+    ON CONFLICT (name) DO NOTHING;
+  `);
 
-  // Query existing warehouses
-  const wRes = await pool.query('SELECT * FROM warehouses ORDER BY id ASC');
+  // Query test warehouses
+  const wRes = await pool.query("SELECT * FROM warehouses WHERE name IN ('Old Warehouse', 'New Warehouse') ORDER BY id ASC");
   testWarehouses = wRes.rows;
 
-  // Insert hermetic test fixture employees
+  // Insert isolated hermetic test fixture employees
   const empRes = await pool.query(`
     INSERT INTO employees (name, experience, skill, warehouse_id, active)
     VALUES
-      ('Test Alice', 'Senior', 5, $1, true),
-      ('Test Bob', 'Junior', 1, $1, true),
-      ('Test Charlie', 'Mid', 4, $2, true),
-      ('Test Diana', 'Junior', 2, $2, true)
+      ('__Test_Alice__', 'Senior', 5, $1, true),
+      ('__Test_Bob__', 'Junior', 1, $1, true),
+      ('__Test_Charlie__', 'Mid', 4, $2, true),
+      ('__Test_Diana__', 'Junior', 2, $2, true)
     RETURNING id, name, warehouse_id;
   `, [testWarehouses[0].id, testWarehouses[1].id]);
   testEmployees = empRes.rows;
 
   t.after(async () => {
-    // Restore clean production state (0 employees, 0 assignments)
-    await cleanDb();
+    // Only clean up the isolated test fixtures created by this test run!
+    // NEVER delete user or production data!
+    try {
+      await pool.query("DELETE FROM absences WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
+      await pool.query("UPDATE assignments SET replaces_assignment_id = NULL WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
+      await pool.query("DELETE FROM assignments WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
+      await pool.query("DELETE FROM employees WHERE name LIKE '__Test_%'");
+      await pool.query("DELETE FROM assignment_runs WHERE duty_date IN ('2026-09-25', '2026-09-28')");
+      await pool.query("DELETE FROM assignments WHERE duty_date IN ('2026-09-25', '2026-09-28', '2026-09-01', '2026-09-27')");
+      await pool.query("DELETE FROM daily_logs WHERE duty_date IN ('2026-09-25', '2026-09-28', '2026-09-01', '2026-09-27')");
+      await pool.query("DELETE FROM absences WHERE starts_on = '2026-09-28'");
+    } catch (e) {
+      console.error('Test cleanup error:', e);
+    }
     server.close();
     await pool.end();
   });
@@ -101,7 +116,8 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     assert.ok(Array.isArray(data.employees));
     assert.ok(Array.isArray(data.assignments));
     assert.ok(data.warehouses.length > 0);
-    assert.equal(data.employees.length, 4);
+    assert.ok(data.employees.length >= testEmployees.length);
+    assert.ok(testEmployees.every((te) => data.employees.some((e) => e.id === te.id)));
   });
 
   await t.test('POST /api/generate previews shift plan for tomorrow', async () => {
