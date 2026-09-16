@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Calendar,
@@ -127,12 +126,10 @@ export default function App() {
   const [generatorDate, setGeneratorDate] = useState(null);
   const [generatorWarehouseId, setGeneratorWarehouseId] = useState(null);
 
-  const fetchBootstrapData = async () => {
   const fetchBootstrapData = useCallback(async () => {
     if (!authToken) return;
     try {
       setLoading(true);
-      const res = await fetch('/api/bootstrap');
       const res = await authFetch('/api/bootstrap');
       if (!res.ok) {
         let details = '';
@@ -153,12 +150,9 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
   }, [authToken, authFetch]);
 
   useEffect(() => {
-    fetchBootstrapData();
-  }, []);
     if (authToken && !isVerifyingAuth) {
       fetchBootstrapData();
     }
@@ -167,7 +161,6 @@ export default function App() {
   // Handlers
   const handleUpdateAssignmentStatus = async (id, status) => {
     try {
-      const res = await fetch(`/api/assignments/${id}`, {
       const res = await authFetch(`/api/assignments/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -191,7 +184,6 @@ export default function App() {
 
   const handleUpdateDailyStatus = async (warehouse_id, duty_date, status, notes = '') => {
     try {
-      const res = await fetch('/api/daily-status', {
       const res = await authFetch('/api/daily-status', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -208,7 +200,6 @@ export default function App() {
   };
 
   const handleSaveRequirement = async (warehouse_id, duty_date, worker_count) => {
-    await fetch('/api/requirements', {
     await authFetch('/api/requirements', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -217,7 +208,6 @@ export default function App() {
   };
 
   const handleReportAbsence = async (assignment_id, reason) => {
-    const res = await fetch('/api/assignments/report-absence', {
     const res = await authFetch('/api/assignments/report-absence', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -230,7 +220,6 @@ export default function App() {
   };
 
   const handleConfirmToday = async (duty_date) => {
-    const res = await fetch('/api/assignments/confirm-today', {
     const res = await authFetch('/api/assignments/confirm-today', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -243,7 +232,6 @@ export default function App() {
   };
 
   const handleSwapWarehouses = async (duty_date) => {
-    const res = await fetch('/api/assignments/swap', {
     const res = await authFetch('/api/assignments/swap', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -256,7 +244,6 @@ export default function App() {
   };
 
   const handleLogHistoricalPickup = async ({ employee_id, warehouse_id, duty_date }) => {
-    const res = await fetch('/api/historical-pickup', {
     const res = await authFetch('/api/historical-pickup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -269,7 +256,6 @@ export default function App() {
   };
 
   const handleDeleteHistoricalPickup = async (id) => {
-    const res = await fetch(`/api/historical-pickup/${id}`, { method: 'DELETE' });
     const res = await authFetch(`/api/historical-pickup/${id}`, { method: 'DELETE' });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || 'Failed to delete historical pickup');
@@ -278,7 +264,6 @@ export default function App() {
   };
 
   const handleToggleEmergencySunday = async (duty_date, enabled) => {
-    const res = await fetch('/api/daily-status/emergency-sunday', {
     const res = await authFetch('/api/daily-status/emergency-sunday', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -291,7 +276,6 @@ export default function App() {
   };
 
   const handleGeneratePlan = async ({ duty_date, warehouse_id, dry_run }) => {
-    const res = await fetch('/api/generate', {
     const res = await authFetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -306,7 +290,6 @@ export default function App() {
   };
 
   const handleAddEmployee = async (formData) => {
-    const res = await fetch('/api/employees', {
     const res = await authFetch('/api/employees', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -320,7 +303,6 @@ export default function App() {
   };
 
   const handleUpdateEmployee = async (id, formData) => {
-    const res = await fetch(`/api/employees/${id}`, {
     const res = await authFetch(`/api/employees/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -334,14 +316,12 @@ export default function App() {
   };
 
   const handleDeleteEmployee = async (id) => {
-    const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
     const res = await authFetch(`/api/employees/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to archive employee');
     await fetchBootstrapData();
   };
 
   const handleAddAbsence = async (formData) => {
-    const res = await fetch('/api/absences', {
     const res = await authFetch('/api/absences', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -355,14 +335,12 @@ export default function App() {
   };
 
   const handleDeleteAbsence = async (id) => {
-    const res = await fetch(`/api/absences/${id}`, { method: 'DELETE' });
     const res = await authFetch(`/api/absences/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to remove absence');
     await fetchBootstrapData();
   };
 
   const handleAddWarehouse = async (formData) => {
-    const res = await fetch('/api/warehouses', {
     const res = await authFetch('/api/warehouses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -376,7 +354,6 @@ export default function App() {
   };
 
   const handleUpdateWarehouse = async (id, formData) => {
-    const res = await fetch(`/api/warehouses/${id}`, {
     const res = await authFetch(`/api/warehouses/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -431,21 +408,11 @@ export default function App() {
     <div className="app-container">
       {/* Navigation Bar */}
       <header className="navbar">
-        <div className="nav-brand">
-          <div className="brand-icon">
-            <Truck size={20} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span className="brand-title">PickUp</span>
-              <span className="brand-badge">Overtime Dispatcher</span>
         <div className="navbar-top-row">
           <div className="nav-brand">
             <div className="brand-icon">
               <Truck size={20} />
             </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              {activeEmployeeCount} Active Staff · {data.warehouses.length} Warehouses
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span className="brand-title">PickUp</span>
@@ -503,7 +470,6 @@ export default function App() {
             className={`nav-tab ${activeTab === 'calendar' ? 'active' : ''}`}
             onClick={() => setActiveTab('calendar')}
           >
-            <Calendar size={15} /> Calendar & Dispatch
             <Calendar size={15} />
             <span>Calendar & Dispatch</span>
           </button>
@@ -511,7 +477,6 @@ export default function App() {
             className={`nav-tab ${activeTab === 'employees' ? 'active' : ''}`}
             onClick={() => setActiveTab('employees')}
           >
-            <Users size={15} /> Employees & Availability
             <Users size={15} />
             <span>Employees</span>
           </button>
@@ -519,7 +484,6 @@ export default function App() {
             className={`nav-tab ${activeTab === 'analytics' ? 'active' : ''}`}
             onClick={() => setActiveTab('analytics')}
           >
-            <BarChart3 size={15} /> Fairness & Metrics
             <BarChart3 size={15} />
             <span>Fairness</span>
           </button>
@@ -527,62 +491,10 @@ export default function App() {
             className={`nav-tab ${activeTab === 'warehouses' ? 'active' : ''}`}
             onClick={() => setActiveTab('warehouses')}
           >
-            <Building2 size={15} /> Settings (Warehouses)
             <Building2 size={15} />
             <span>Settings</span>
           </button>
         </nav>
-
-        <div className="nav-actions">
-          {/* Senior Supervisor Profile Badge */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.45rem',
-              backgroundColor: 'rgba(56, 189, 248, 0.1)',
-              border: '1px solid rgba(56, 189, 248, 0.25)',
-              padding: '0.35rem 0.65rem',
-              borderRadius: 'var(--radius-sm)',
-            }}
-          >
-            <ShieldCheck size={14} color="var(--accent-blue)" />
-            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent-blue)' }}>
-              {authUser?.name || 'Senior Access'}
-            </span>
-          </div>
-
-          {/* Theme Switcher */}
-          <button
-            className="theme-toggle-btn"
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          >
-            {theme === 'dark' ? (
-              <Sun size={17} color="var(--accent-amber)" />
-            ) : (
-              <Moon size={17} color="var(--accent-blue)" />
-            )}
-          </button>
-
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={fetchBootstrapData}
-            title="Refresh application data"
-          >
-            <RefreshCw size={13} className={loading ? 'spin' : ''} /> Refresh
-          </button>
-
-          {/* Lock / Log Out Button */}
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={handleLogout}
-            title="Lock session and log out"
-            style={{ gap: '0.35rem', borderColor: 'rgba(239, 68, 68, 0.3)', color: 'var(--accent-red)' }}
-          >
-            <LogOut size={13} /> Lock
-          </button>
-        </div>
       </header>
 
       {/* Main Content Area */}

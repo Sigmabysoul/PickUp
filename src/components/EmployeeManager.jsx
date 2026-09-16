@@ -126,7 +126,6 @@ export default function EmployeeManager({
             <Users color="var(--accent-blue)" size={24} />
             Employee Roster & Availability Management
           </div>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <button className="btn btn-secondary btn-sm" onClick={() => setIsAbsenceModalOpen(true)}>
               <CalendarOff size={14} /> Log Vacation/Absence
@@ -138,14 +137,6 @@ export default function EmployeeManager({
         </div>
 
         {/* Filters and search */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '1rem',
-            marginBottom: '1.25rem',
-          }}
-        >
         <div className="filter-bar-grid">
           <div style={{ position: 'relative' }}>
             <Search

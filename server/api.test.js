@@ -47,7 +47,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     await pool.end();
   });
 
-  await t.test('GET /api/bootstrap returns warehouses, employees, assignments', async () => {
   await t.test('Unauthenticated GET /api/bootstrap returns 401 Unauthorized', async () => {
     const res = await fetch(`${baseUrl}/api/bootstrap`);
     assert.equal(res.status, 401);
@@ -106,7 +105,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
   });
 
   await t.test('POST /api/generate previews shift plan for tomorrow', async () => {
-    const res = await fetch(`${baseUrl}/api/generate`, {
     const res = await apiFetch(`${baseUrl}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -131,7 +129,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     await pool.query("DELETE FROM assignment_runs WHERE duty_date = '2026-09-28'");
 
     // 1. First generate an assignment for test date
-    const genRes = await fetch(`${baseUrl}/api/generate`, {
     const genRes = await apiFetch(`${baseUrl}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -143,14 +140,12 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     assert.equal(genRes.status, 200);
 
     // 2. Fetch assignments
-    const bootRes = await fetch(`${baseUrl}/api/bootstrap`);
     const bootRes = await apiFetch(`${baseUrl}/api/bootstrap`);
     const bootData = await bootRes.json();
     const testAssignment = bootData.assignments.find((a) => a.duty_date === '2026-09-28' && a.status === 'scheduled');
     assert.ok(testAssignment, 'Test assignment should exist');
 
     // 3. Report absence
-    const absRes = await fetch(`${baseUrl}/api/assignments/report-absence`, {
     const absRes = await apiFetch(`${baseUrl}/api/assignments/report-absence`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -167,7 +162,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
   });
 
   await t.test('POST /api/assignments/confirm-today locks today crew and sets completed', async () => {
-    const res = await fetch(`${baseUrl}/api/assignments/confirm-today`, {
     const res = await apiFetch(`${baseUrl}/api/assignments/confirm-today`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -180,7 +174,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
   });
 
   await t.test('POST /api/assignments/swap swaps warehouse locations between the two assigned workers', async () => {
-    const res = await fetch(`${baseUrl}/api/assignments/swap`, {
     const res = await apiFetch(`${baseUrl}/api/assignments/swap`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -192,7 +185,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
   });
 
   await t.test('POST /api/historical-pickup logs pre-app overtime duty and updates status', async () => {
-    const res = await fetch(`${baseUrl}/api/historical-pickup`, {
     const res = await apiFetch(`${baseUrl}/api/historical-pickup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -209,7 +201,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     assert.equal(data.assignment.duty_date, '2026-09-01');
 
     // Verify daily_logs reflects overtime_stay
-    const bootRes = await fetch(`${baseUrl}/api/bootstrap`);
     const bootRes = await apiFetch(`${baseUrl}/api/bootstrap`);
     const bootData = await bootRes.json();
     const log = bootData.dailyLogs.find((l) => l.duty_date === '2026-09-01');
@@ -217,7 +208,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     assert.equal(log.status, 'overtime_stay');
 
     // Now test deletion
-    const delRes = await fetch(`${baseUrl}/api/historical-pickup/${data.assignment.id}`, {
     const delRes = await apiFetch(`${baseUrl}/api/historical-pickup/${data.assignment.id}`, {
       method: 'DELETE',
     });
@@ -226,7 +216,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     assert.equal(delData.success, true);
 
     // Verify daily log was cleaned up since 0 completed pickups remain on 2026-09-01
-    const postDelBoot = await (await fetch(`${baseUrl}/api/bootstrap`)).json();
     const postDelBoot = await (await apiFetch(`${baseUrl}/api/bootstrap`)).json();
     const postDelLog = postDelBoot.dailyLogs.find((l) => l.duty_date === '2026-09-01');
     assert.equal(postDelLog, undefined, 'Daily log should be removed after removing last record');
@@ -234,7 +223,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
 
   await t.test('POST /api/daily-status/emergency-sunday activates and deactivates emergency Sunday', async () => {
     // 1. Activate
-    const actRes = await fetch(`${baseUrl}/api/daily-status/emergency-sunday`, {
     const actRes = await apiFetch(`${baseUrl}/api/daily-status/emergency-sunday`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -245,14 +233,12 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     assert.equal(actData.enabled, true);
 
     // Verify daily log exists
-    let boot = await (await fetch(`${baseUrl}/api/bootstrap`)).json();
     let boot = await (await apiFetch(`${baseUrl}/api/bootstrap`)).json();
     let log = boot.dailyLogs.find((l) => l.duty_date === '2026-09-27');
     assert.ok(log);
     assert.ok(log.notes.includes('Emergency Sunday'));
 
     // 2. Deactivate
-    const deactRes = await fetch(`${baseUrl}/api/daily-status/emergency-sunday`, {
     const deactRes = await apiFetch(`${baseUrl}/api/daily-status/emergency-sunday`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -261,14 +247,11 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     assert.equal(deactRes.status, 200);
 
     // Verify cleaned up
-    boot = await (await fetch(`${baseUrl}/api/bootstrap`)).json();
     boot = await (await apiFetch(`${baseUrl}/api/bootstrap`)).json();
     log = boot.dailyLogs.find((l) => l.duty_date === '2026-09-27');
     assert.equal(log, undefined);
   });
 
-  await t.test('GET /api/export returns CSV data with default previous month', async () => {
-    const exportRes = await fetch(`${baseUrl}/api/export?format=csv`);
   await t.test('GET /api/export returns CSV data with default previous month when authenticated', async () => {
     const exportRes = await apiFetch(`${baseUrl}/api/export?format=csv`);
     assert.equal(exportRes.status, 200);

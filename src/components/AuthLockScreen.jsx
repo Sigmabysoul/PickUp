@@ -88,31 +88,6 @@ export default function AuthLockScreen({ onAuthenticated }) {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '1.5rem',
-        backgroundColor: 'var(--bg-app, #030712)',
-        backgroundImage:
-          'radial-gradient(ellipse at 50% 15%, rgba(56, 189, 248, 0.08) 0%, transparent 60%)',
-      }}
-    >
-      <div
-        className={shake ? 'shake-animation' : ''}
-        style={{
-          width: '100%',
-          maxWidth: '430px',
-          backgroundColor: 'var(--bg-surface, #0f172a)',
-          border: '1px solid var(--border-color, #1e293b)',
-          borderRadius: '1rem',
-          padding: '2.25rem 2rem',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 30px rgba(56, 189, 248, 0.08)',
-          position: 'relative',
-        }}
-      >
     <div className="auth-screen-container">
       <div className={`auth-screen-box ${shake ? 'shake-animation' : ''}`}>
         {/* Brand Icon / Header */}

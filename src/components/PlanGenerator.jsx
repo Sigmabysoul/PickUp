@@ -122,7 +122,6 @@ export default function PlanGenerator({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
             gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
             gap: '1rem',
             marginBottom: '1.5rem',
@@ -170,7 +169,6 @@ export default function PlanGenerator({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
               gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
               gap: '0.75rem',
             }}
@@ -210,7 +208,6 @@ export default function PlanGenerator({
         </div>
 
         {/* Action buttons */}
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
         <div className="plan-actions-group">
           <button
             className="btn btn-secondary"

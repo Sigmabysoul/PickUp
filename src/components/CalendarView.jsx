@@ -563,7 +563,6 @@ export default function CalendarView({
               </h3>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               {isPastDate && (
                 <button
@@ -925,7 +924,6 @@ export default function CalendarView({
                                 }}
                               >
                                 {/* Worker Profile Header */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
                                   <div>
                                     <div style={{ fontSize: '1.05rem', fontWeight: 800 }}>
@@ -1016,7 +1014,6 @@ export default function CalendarView({
 
                                 {/* Actions for Today */}
                                 {!isAbsent && (
-                                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
                                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
                                     {!isStayed && (
                                       <button
