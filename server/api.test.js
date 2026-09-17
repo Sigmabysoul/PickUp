@@ -543,6 +543,6 @@ test('API Server Lifecycle & Endpoints', async (t) => {
       [testDate]
     );
     assert.ok(logRes.rows.length > 0);
-    assert.ok(logRes.rows[0].notes.includes('Senior Supervisor acknowledged risk'));
+    assert.ok(logRes.rows[0].notes.includes('Senior Supervisor acknowledged Head Office key delivery risk'));
   });
 });
