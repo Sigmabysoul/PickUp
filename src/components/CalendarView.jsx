@@ -15,12 +15,12 @@ import {
   Coffee,
   Sparkles,
   ArrowLeftRight,
-  Info,
   Plus,
   Trash2,
   AlertCircle,
   Key,
   RotateCw,
+  MoreVertical,
 } from 'lucide-react';
 
 export default function CalendarView({
@@ -55,6 +55,7 @@ export default function CalendarView({
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedDateStr, setSelectedDateStr] = useState(() => getTodayDateStr());
   const [viewMode, setViewMode] = useState('calendar'); // 'calendar' | 'list'
+  const [isCrewMenuOpen, setIsCrewMenuOpen] = useState(false);
 
   // Super Senior Modal State (Emergency Big Shipments)
   const [isSuperSeniorModalOpen, setIsSuperSeniorModalOpen] = useState(false);
@@ -568,9 +569,7 @@ export default function CalendarView({
                   let cellClass = 'day-box';
                   if (!cell.isCurrentMonth) cellClass += ' day-other-month';
 
-                  if (hasSuperSenior) {
-                    cellClass += ' day-status-supersenior';
-                  } else if (statusInfo.type === 'overtime_stay') {
+                  if (statusInfo.type === 'overtime_stay') {
                     cellClass += ' day-status-overtime';
                   } else if (statusInfo.type === 'before_7pm') {
                     cellClass += ' day-status-before7pm';
@@ -619,8 +618,7 @@ export default function CalendarView({
                   <span className="legend-text">Overtime Stay</span>
                 </div>
                 <div className="legend-item">
-                  <span className="legend-dot dot-supersenior"></span>
-                  <span style={{ fontSize: '0.82rem', marginLeft: '-2px' }}>👑</span>
+                  <span style={{ fontSize: '0.88rem' }}>👑</span>
                   <span className="legend-text">Super Senior</span>
                 </div>
                 <div className="legend-item">
@@ -1053,80 +1051,148 @@ export default function CalendarView({
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      {/* Small Generate / Rerun Rotation Button at Top */}
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        style={{
-                          fontSize: '0.78rem',
-                          padding: '0.28rem 0.65rem',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                          fontWeight: 700,
-                        }}
-                        onClick={() => handleQuickAutoSelect()}
-                        title={
-                          hasAbsentWorker
-                            ? 'Participant absent: click to rerun rotation and select fair replacement'
-                            : selectedAssignments.length > 0
-                            ? 'Rerun fair rotation algorithm'
-                            : 'Auto-select fair overtime crew (2 workers)'
-                        }
-                      >
-                        {hasAbsentWorker ? (
+                    <div className="crew-header-actions-wrapper">
+                      {/* Desktop Action Buttons */}
+                      <div className="crew-actions-desktop">
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          style={{
+                            fontSize: '0.78rem',
+                            padding: '0.28rem 0.65rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            fontWeight: 700,
+                          }}
+                          onClick={() => handleQuickAutoSelect()}
+                          title={
+                            hasAbsentWorker
+                              ? 'Participant absent: click to rerun rotation and select fair replacement'
+                              : selectedAssignments.length > 0
+                              ? 'Rerun fair rotation algorithm'
+                              : 'Auto-select fair overtime crew (2 workers)'
+                          }
+                        >
+                          {hasAbsentWorker ? (
+                            <>
+                              <RotateCw size={13} /> <span>🔄 Rerun Rotation</span>
+                            </>
+                          ) : selectedAssignments.length > 0 ? (
+                            <>
+                              <RotateCw size={13} /> <span>🔄 Rerun</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles size={13} /> <span>Generate Crew</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={handleOpenManualPickModal}
+                          disabled={isPastDate && !isAdmin}
+                          style={{
+                            fontSize: '0.78rem',
+                            padding: '0.28rem 0.65rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            fontWeight: 700,
+                            background: 'rgba(245, 158, 11, 0.12)',
+                            border: '1px solid rgba(245, 158, 11, 0.4)',
+                            color: '#f59e0b',
+                          }}
+                          title={isPastDate && !isAdmin ? 'Only Admin can assign past dates' : "Assign volunteers or manually pick staff for today"}
+                        >
+                          <UserCheck size={13} /> <span>🙋 Volunteer / Pick</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleOpenSuperSeniorModal(selectedDateStr)}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.2))',
+                            border: '1px solid rgba(245, 158, 11, 0.5)',
+                            color: '#fbbf24',
+                            fontWeight: 700,
+                            fontSize: '0.78rem',
+                            padding: '0.28rem 0.65rem',
+                          }}
+                          title="Dispatch on-call Super Senior for emergency big shipments"
+                        >
+                          👑 Super Senior
+                        </button>
+                      </div>
+
+                      {/* Mobile 3-Dot Dropdown Action Menu */}
+                      <div className="crew-actions-mobile">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm crew-3dot-btn"
+                          onClick={() => setIsCrewMenuOpen(!isCrewMenuOpen)}
+                          aria-label="More dispatch actions"
+                          title="Actions: Rerun, Volunteer / Pick, Super Senior"
+                        >
+                          <MoreVertical size={18} />
+                        </button>
+
+                        {isCrewMenuOpen && (
                           <>
-                            <RotateCw size={13} /> <span>🔄 Rerun Rotation</span>
-                          </>
-                        ) : selectedAssignments.length > 0 ? (
-                          <>
-                            <RotateCw size={13} /> <span>🔄 Rerun</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={13} /> <span>Generate Crew</span>
+                            <div
+                              className="crew-dropdown-backdrop"
+                              onClick={() => setIsCrewMenuOpen(false)}
+                            />
+                            <div className="crew-dropdown-popover">
+                              <button
+                                type="button"
+                                className="crew-dropdown-item"
+                                onClick={() => {
+                                  setIsCrewMenuOpen(false);
+                                  handleQuickAutoSelect();
+                                }}
+                              >
+                                <RotateCw size={15} color="var(--accent-blue)" />
+                                <span>
+                                  {hasAbsentWorker
+                                    ? '🔄 Rerun Rotation (Replace Absent)'
+                                    : selectedAssignments.length > 0
+                                    ? '🔄 Rerun Rotation'
+                                    : '✨ Generate Crew'}
+                                </span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="crew-dropdown-item"
+                                disabled={isPastDate && !isAdmin}
+                                onClick={() => {
+                                  setIsCrewMenuOpen(false);
+                                  handleOpenManualPickModal();
+                                }}
+                              >
+                                <UserCheck size={15} color="#f59e0b" />
+                                <span>🙋 Volunteer / Manual Pick</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="crew-dropdown-item"
+                                onClick={() => {
+                                  setIsCrewMenuOpen(false);
+                                  handleOpenSuperSeniorModal(selectedDateStr);
+                                }}
+                              >
+                                <span style={{ fontSize: '1rem', lineHeight: 1 }}>👑</span>
+                                <span>Super Senior (Emergency)</span>
+                              </button>
+                            </div>
                           </>
                         )}
-                      </button>
-
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={handleOpenManualPickModal}
-                        disabled={isPastDate && !isAdmin}
-                        style={{
-                          fontSize: '0.78rem',
-                          padding: '0.28rem 0.65rem',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                          fontWeight: 700,
-                          background: 'rgba(245, 158, 11, 0.12)',
-                          border: '1px solid rgba(245, 158, 11, 0.4)',
-                          color: '#f59e0b',
-                        }}
-                        title={isPastDate && !isAdmin ? 'Only Admin can assign past dates' : "Assign volunteers or manually pick staff for today"}
-                      >
-                        <UserCheck size={13} /> <span>🙋 Volunteer / Pick</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => handleOpenSuperSeniorModal(selectedDateStr)}
-                        style={{
-                          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.2))',
-                          border: '1px solid rgba(245, 158, 11, 0.5)',
-                          color: '#fbbf24',
-                          fontWeight: 700,
-                          fontSize: '0.78rem',
-                          padding: '0.28rem 0.65rem',
-                        }}
-                        title="Dispatch on-call Super Senior for emergency big shipments"
-                      >
-                        👑 Super Senior
-                      </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1299,28 +1365,6 @@ export default function CalendarView({
                                   </span>
                                 )}
                               </div>
-                            </div>
-
-                            {/* Deterministic Logic Explanation */}
-                            <div
-                              style={{
-                                fontSize: '0.78rem',
-                                color: isSuperSenior ? 'var(--accent-amber)' : 'var(--accent-blue)',
-                                marginTop: '0.55rem',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.35rem',
-                                backgroundColor: isSuperSenior ? 'rgba(245, 158, 11, 0.08)' : 'rgba(56, 189, 248, 0.08)',
-                                padding: '0.35rem 0.55rem',
-                                borderRadius: '4px',
-                              }}
-                            >
-                              <Info size={12} />
-                              <span>
-                                {isSuperSenior
-                                  ? 'Super Senior on-duty for emergency big shipment (excluded from regular algorithm)'
-                                  : 'Deterministic fair rotation: lowest completed count, anti-consecutive rest & key coverage'}
-                              </span>
                             </div>
 
                             {isAbsent && (

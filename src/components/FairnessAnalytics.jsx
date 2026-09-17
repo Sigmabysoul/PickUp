@@ -9,6 +9,8 @@ import {
   Users,
   CheckCircle2,
   Calendar,
+  Menu,
+  X,
 } from 'lucide-react';
 
 export default function FairnessAnalytics({
@@ -35,6 +37,7 @@ export default function FairnessAnalytics({
   }, [assignments]);
 
   const [selectedMonth, setSelectedMonth] = useState(() => getTodayMonthStr());
+  const [showMobileMetrics, setShowMobileMetrics] = useState(false);
 
   const formatMonthLabel = (monthStr) => {
     const [year, month] = monthStr.split('-');
@@ -137,93 +140,103 @@ export default function FairnessAnalytics({
             {totalCompleted} stays this month
           </span>
         </div>
-        <select
-          className="form-select"
-          style={{ width: 'auto', minWidth: '180px', fontSize: '0.9rem', padding: '0.4rem 0.75rem' }}
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(e.target.value)}
-        >
-          {availableMonths.map((m) => (
-            <option key={m} value={m}>
-              {formatMonthLabel(m)}
-            </option>
-          ))}
-        </select>
+        <div className="fairness-month-controls">
+          <select
+            className="form-select"
+            style={{ width: 'auto', minWidth: '160px', fontSize: '0.88rem', padding: '0.4rem 0.75rem' }}
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+          >
+            {availableMonths.map((m) => (
+              <option key={m} value={m}>
+                {formatMonthLabel(m)}
+              </option>
+            ))}
+          </select>
+
+          {/* Hamburger toggle button for 4 metric boxes on mobile */}
+          <button
+            type="button"
+            className="mobile-fairness-metrics-toggle-btn"
+            onClick={() => setShowMobileMetrics(!showMobileMetrics)}
+            aria-label="Toggle Summary Statistics"
+            title={showMobileMetrics ? 'Hide summary statistics' : 'Show summary statistics'}
+          >
+            {showMobileMetrics ? <X size={18} /> : <Menu size={18} />}
+            <span className="mobile-toggle-btn-label">Stats</span>
+          </button>
+        </div>
       </div>
 
-      {/* Metric Cards */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
-          gap: '1rem',
-        }}
-      >
-        <div className="metric-card metric-emerald">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-              TOTAL STAYS
-            </span>
-            <div className="metric-icon-pod emerald">
-              <ShieldCheck size={20} />
+      {/* Metric Cards Container (collapsible dropdown on mobile, grid on desktop) */}
+      <div className={`fairness-metrics-container ${showMobileMetrics ? 'mobile-visible' : 'mobile-hidden'}`}>
+        <div className="fairness-metrics-grid">
+          <div className="metric-card metric-emerald">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                TOTAL STAYS
+              </span>
+              <div className="metric-icon-pod emerald">
+                <ShieldCheck size={20} />
+              </div>
+            </div>
+            <div className="metric-val" style={{ color: '#4ade80' }}>
+              {totalCompleted}
+            </div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ color: '#22c55e', fontWeight: 600 }}>● Confirmed</span> overtime stays
             </div>
           </div>
-          <div className="metric-val" style={{ color: '#4ade80' }}>
-            {totalCompleted}
-          </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <span style={{ color: '#22c55e', fontWeight: 600 }}>● Confirmed</span> overtime stays
-          </div>
-        </div>
 
-        <div className="metric-card metric-cyan">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-              AVG STAYS / WORKER
-            </span>
-            <div className="metric-icon-pod cyan">
-              <TrendingUp size={20} />
+          <div className="metric-card metric-cyan">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                AVG STAYS / WORKER
+              </span>
+              <div className="metric-icon-pod cyan">
+                <TrendingUp size={20} />
+              </div>
+            </div>
+            <div className="metric-val" style={{ color: '#38bdf8' }}>
+              {avgStays}
+            </div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+              Group range: <strong>{minStays}</strong> to <strong>{maxStays}</strong> stays
             </div>
           </div>
-          <div className="metric-val" style={{ color: '#38bdf8' }}>
-            {avgStays}
-          </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
-            Group range: <strong>{minStays}</strong> to <strong>{maxStays}</strong> stays
-          </div>
-        </div>
 
-        <div className="metric-card metric-amber">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-              FAIRNESS SPREAD
-            </span>
-            <div className="metric-icon-pod amber">
-              <Award size={20} />
+          <div className="metric-card metric-amber">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                FAIRNESS SPREAD
+              </span>
+              <div className="metric-icon-pod amber">
+                <Award size={20} />
+              </div>
+            </div>
+            <div className="metric-val" style={{ color: '#fbbf24', fontSize: '1.65rem', marginTop: '0.65rem' }}>
+              {fairnessRating}
+            </div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+              {fairnessDesc}
             </div>
           </div>
-          <div className="metric-val" style={{ color: '#fbbf24', fontSize: '1.65rem', marginTop: '0.65rem' }}>
-            {fairnessRating}
-          </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
-            {fairnessDesc}
-          </div>
-        </div>
 
-        <div className="metric-card metric-rose">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-              ABSENT CATCH-UPS
-            </span>
-            <div className="metric-icon-pod rose">
-              <AlertCircle size={20} />
+          <div className="metric-card metric-rose">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                ABSENT CATCH-UPS
+              </span>
+              <div className="metric-icon-pod rose">
+                <AlertCircle size={20} />
+              </div>
             </div>
-          </div>
-          <div className="metric-val" style={{ color: '#f87171' }}>
-            {priorityWorkers.length}
-          </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
-            Next-present auto-assigned (Rule 3)
+            <div className="metric-val" style={{ color: '#f87171' }}>
+              {priorityWorkers.length}
+            </div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+              Next-present auto-assigned (Rule 3)
+            </div>
           </div>
         </div>
       </div>

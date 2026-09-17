@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Calendar,
-  Sparkles,
   Users,
   Building2,
   BarChart3,
@@ -18,7 +17,6 @@ import {
   X,
 } from 'lucide-react';
 import CalendarView from './components/CalendarView.jsx';
-import PlanGenerator from './components/PlanGenerator.jsx';
 import EmployeeManager from './components/EmployeeManager.jsx';
 import WarehouseManager from './components/WarehouseManager.jsx';
 import FairnessAnalytics from './components/FairnessAnalytics.jsx';
@@ -219,10 +217,6 @@ function MainApp() {
     runs: [],
   });
 
-  // Generator prefill
-  const [generatorDate, setGeneratorDate] = useState(null);
-  const [generatorWarehouseId, setGeneratorWarehouseId] = useState(null);
-
   // Progressive Web App (PWA) Install Handling
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -309,12 +303,6 @@ function MainApp() {
     } catch (err) {
       alert(err.message);
     }
-  };
-
-  const handleOpenPlanGenerator = (date, whId = null) => {
-    setGeneratorDate(date);
-    setGeneratorWarehouseId(whId);
-    setActiveTab('generator');
   };
 
   const handleUpdateDailyStatus = async (warehouse_id, duty_date, status, notes = '') => {
@@ -739,25 +727,9 @@ function MainApp() {
                 onDeleteHistoricalPickup={handleDeleteHistoricalPickup}
                 onToggleEmergencySunday={handleToggleEmergencySunday}
                 onGeneratePlan={handleGeneratePlan}
-                onOpenPlanGenerator={handleOpenPlanGenerator}
                 onManualOverride={handleManualOverride}
               />
             )}
-
-          {activeTab === 'generator' && (
-            <PlanGenerator
-              warehouses={data.warehouses}
-              employees={data.employees}
-              dailyRequirements={data.dailyRequirements}
-              initialDate={generatorDate}
-              initialWarehouseId={generatorWarehouseId}
-              onSaveRequirement={handleSaveRequirement}
-              onGeneratePlan={handleGeneratePlan}
-              onManualOverride={handleManualOverride}
-              onViewCalendar={() => setActiveTab('calendar')}
-              authUser={authUser}
-            />
-          )}
 
           {activeTab === 'employees' && (
             <EmployeeManager
@@ -842,7 +814,7 @@ function MainApp() {
         </div>
       )}
 
-      {/* Mobile Bottom Navigation Bar (Fixed 5-Tab Bar) */}
+      {/* Mobile Bottom Navigation Bar (4-Tab Bar) */}
       <nav className="mobile-bottom-bar" aria-label="Mobile Navigation">
         <button
           type="button"
@@ -853,17 +825,6 @@ function MainApp() {
             <Calendar size={18} />
           </div>
           <span>Dispatch</span>
-        </button>
-
-        <button
-          type="button"
-          className={`mobile-nav-item ${activeTab === 'generator' ? 'active' : ''}`}
-          onClick={() => setActiveTab('generator')}
-        >
-          <div className="mobile-nav-icon-pod">
-            <Sparkles size={18} />
-          </div>
-          <span>Plan</span>
         </button>
 
         <button

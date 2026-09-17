@@ -1218,7 +1218,7 @@ button {
 .attendance-weekdays-row {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 0.5rem;
+  gap: 0.65rem;
   text-align: center;
 }
 
@@ -1232,7 +1232,7 @@ button {
 .attendance-days-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 0.5rem;
+  gap: 0.65rem;
 }
 
 /* Day Boxes (Exact Match to User's Screenshot) */
@@ -1271,21 +1271,6 @@ button {
 }
 
 /* COLOR STATES REQUESTED BY USER */
-
-/* 1. Green: Days there was a person doing overtime for pickup */
-/* 1. Super Senior Day: PURPLE */
-.day-status-supersenior {
-  background-color: rgba(168, 85, 247, 0.22);
-  color: #c084fc;
-  border-color: rgba(168, 85, 247, 0.55);
-  box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);
-}
-
-[data-theme="light"] .day-status-supersenior {
-  background-color: #f3e8ff;
-  color: #7e22ce;
-  border-color: #d8b4fe;
-}
 
 /* 2. Overtime Stay: GREEN (Aesthetic) */
 .day-status-overtime {
@@ -1428,7 +1413,6 @@ button {
 }
 
 .dot-overtime { background-color: #10b981; }
-.dot-supersenior { background-color: #a855f7; }
 .dot-before7pm { background-color: #38bdf8; }
 .dot-nopickup { background-color: #ef4444; }
 .dot-holiday { background-color: #1e40af; }
@@ -2313,13 +2297,13 @@ button {
     max-width: 160px;
   }
 
-  /* Day cells sizing on mobile */
+  /* Day cells sizing on mobile - clear spacing between dates */
   .attendance-days-grid {
-    gap: 4px;
+    gap: 8px;
   }
 
   .attendance-weekdays-row {
-    gap: 4px;
+    gap: 8px;
   }
 
   .attendance-weekday-label {
@@ -2461,11 +2445,11 @@ button {
   }
 
   .attendance-days-grid {
-    gap: 3px;
+    gap: 6px;
   }
 
   .attendance-weekdays-row {
-    gap: 3px;
+    gap: 6px;
   }
 
   .day-box {
@@ -2531,6 +2515,165 @@ button {
   button, .btn, .nav-tab, .mobile-nav-item, .mobile-calendar-mode-btn {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+  }
+}
+
+/* ==========================================================================
+   DISPATCH 3-DOT ACTION MENU (MOBILE REFINEMENT)
+   ========================================================================== */
+
+.crew-header-actions-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.crew-actions-desktop {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.crew-actions-mobile {
+  display: none;
+  position: relative;
+}
+
+.crew-3dot-btn {
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.crew-3dot-btn:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.crew-dropdown-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 150;
+  background: transparent;
+}
+
+.crew-dropdown-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 151;
+  min-width: 230px;
+  background-color: var(--bg-surface-elevated, #1e293b);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  animation: tabEnter 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crew-dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.crew-dropdown-item:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.crew-dropdown-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .crew-actions-desktop {
+    display: none !important;
+  }
+
+  .crew-actions-mobile {
+    display: block !important;
+  }
+}
+
+/* ==========================================================================
+   FAIRNESS SECTION METRICS TOGGLE (MOBILE DROPDOWN)
+   ========================================================================== */
+
+.fairness-month-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mobile-fairness-metrics-toggle-btn {
+  display: none;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mobile-fairness-metrics-toggle-btn:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.fairness-metrics-container {
+  width: 100%;
+}
+
+.fairness-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .mobile-fairness-metrics-toggle-btn {
+    display: inline-flex !important;
+  }
+
+  .fairness-metrics-container.mobile-hidden {
+    display: none !important;
+  }
+
+  .fairness-metrics-container.mobile-visible {
+    display: block !important;
+    animation: tabEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
 
