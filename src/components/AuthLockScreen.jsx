@@ -42,7 +42,7 @@ export default function AuthLockScreen({ onAuthenticated }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!passcode.trim()) {
-      setError('Please enter your password or senior passcode');
+      setError('Please enter your password or Mod passcode');
       triggerShake();
       return;
     }
@@ -152,7 +152,7 @@ export default function AuthLockScreen({ onAuthenticated }) {
         >
           <ShieldAlert size={16} color="var(--accent-amber, #eab308)" style={{ flexShrink: 0, marginTop: '2px' }} />
           <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #94a3b8)', lineHeight: 1.4 }}>
-            Only senior supervisors have permission to view rosters, plan duties, and confirm overtime pickups.
+            Only administrators and assigned Mods have permission to view rosters, plan duties, and confirm overtime pickups.
           </div>
         </div>
 
@@ -274,7 +274,7 @@ export default function AuthLockScreen({ onAuthenticated }) {
               >
                 {selectedSupervisor === 'admin'
                   ? 'Administrator Password:'
-                  : 'Senior Passcode / PIN:'}
+                  : 'Mod Passcode / PIN:'}
               </label>
             </div>
 
@@ -302,7 +302,7 @@ export default function AuthLockScreen({ onAuthenticated }) {
                 placeholder={
                   selectedSupervisor === 'admin'
                     ? 'Enter Admin Password'
-                    : 'Enter assigned senior passcode'
+                    : 'Enter assigned Mod passcode'
                 }
                 autoFocus
                 style={{

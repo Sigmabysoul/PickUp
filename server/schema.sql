@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS app_users (
     username TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     passcode TEXT NOT NULL,
-    role TEXT DEFAULT 'senior' NOT NULL CHECK (role IN ('admin', 'senior')),
+    role TEXT DEFAULT 'mod' NOT NULL CHECK (role IN ('admin', 'senior', 'mod')),
     active BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );

@@ -2519,4 +2519,18 @@ button {
     justify-content: center;
     min-height: 44px;
   }
+
+  .mobile-nav-item span {
+    font-size: 0.66rem;
+    letter-spacing: -0.2px;
+  }
 }
+
+/* Touch Device Optimization */
+@media (hover: none) and (pointer: coarse) {
+  button, .btn, .nav-tab, .mobile-nav-item, .mobile-calendar-mode-btn {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+

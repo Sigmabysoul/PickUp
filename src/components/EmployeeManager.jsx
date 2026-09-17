@@ -18,28 +18,33 @@ export default function EmployeeManager({
   employees = [],
   warehouses = [],
   absences = [],
+  authUser = null,
   onAddEmployee,
   onUpdateEmployee,
   onDeleteEmployee,
   onAddAbsence,
   onDeleteAbsence,
 }) {
+  const isAdmin = authUser?.role === 'admin';
   const [searchTerm, setSearchTerm] = useState('');
   const [experienceFilter, setExperienceFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('table');
 
   // Modals state
   const [isEmpModalOpen, setIsEmpModalOpen] = useState(false);
+  const [isAbsenceModalOpen, setIsAbsenceModalOpen] = useState(false);
   const [editingEmp, setEditingEmp] = useState(null);
   const [empForm, setEmpForm] = useState({
     name: '',
     warehouse_id: warehouses[0]?.id || '',
     experience: 'Junior',
     skill: 2,
+    can_hold_key: false,
+    eligible_for_normal_pickup: false,
     active: true,
   });
 
-  const [isAbsenceModalOpen, setIsAbsenceModalOpen] = useState(false);
   const [absenceForm, setAbsenceForm] = useState({
     employee_id: '',
     starts_on: new Date().toISOString().split('T')[0],
@@ -68,6 +73,7 @@ export default function EmployeeManager({
       experience: 'Junior',
       skill: 2,
       can_hold_key: false,
+      eligible_for_normal_pickup: false,
       active: true,
     });
     setIsEmpModalOpen(true);
@@ -81,6 +87,7 @@ export default function EmployeeManager({
       experience: emp.experience,
       skill: emp.skill,
       can_hold_key: Boolean(emp.can_hold_key),
+      eligible_for_normal_pickup: Boolean(emp.eligible_for_normal_pickup),
       active: emp.active,
     });
     setIsEmpModalOpen(true);
@@ -245,7 +252,11 @@ export default function EmployeeManager({
                               : 'badge-junior'
                           }`}
                         >
-                          {emp.experience === 'Super Senior' ? '👑 Super Senior' : emp.experience}
+                          {emp.experience === 'Super Senior'
+                            ? emp.eligible_for_normal_pickup
+                              ? '👑 Super Senior · Normal Rotation'
+                              : '👑 Super Senior · On-Call Only'
+                            : emp.experience}
                         </span>
                         {emp.can_hold_key && (
                           <span
@@ -275,7 +286,7 @@ export default function EmployeeManager({
                       </td>
                       <td>
                         <span className="badge" style={{ backgroundColor: 'var(--bg-surface-elevated)' }}>
-                          {emp.experience === 'Super Senior'
+                          {emp.experience === 'Super Senior' && !emp.eligible_for_normal_pickup
                             ? 'On-Call (Emergency Only)'
                             : `${emp.completedCount || 0} completed (${emp.effectiveCompletedCount || emp.completedCount || 0} total)`}
                         </span>
@@ -382,14 +393,18 @@ export default function EmployeeManager({
                       </div>
                     </div>
                     <span className={`badge ${badgeClass}`}>
-                      {emp.experience === 'Super Senior' ? '👑 Super Senior' : emp.experience}
+                      {emp.experience === 'Super Senior'
+                        ? emp.eligible_for_normal_pickup
+                          ? '👑 Super Senior · Normal'
+                          : '👑 Super Senior · On-Call'
+                        : emp.experience}
                     </span>
                   </div>
 
                   {/* Badges & Stats */}
                   <div className="mobile-emp-stats-row">
                     <span className="mobile-emp-stat-pill">
-                      {emp.experience === 'Super Senior'
+                      {emp.experience === 'Super Senior' && !emp.eligible_for_normal_pickup
                         ? '👑 On-Call Emergency Crew'
                         : `🔥 ${emp.completedCount || 0} completed stays`}
                     </span>
@@ -584,20 +599,64 @@ export default function EmployeeManager({
                   <option value="Junior">Junior</option>
                   <option value="Mid">Mid</option>
                   <option value="Senior">Senior</option>
-                  <option value="Super Senior">👑 Super Senior (On-Call for Big Shipments)</option>
+                  {isAdmin && (
+                    <option value="Super Senior">👑 Super Senior (On-Call for Big Shipments)</option>
+                  )}
                 </select>
                 {empForm.experience === 'Super Senior' && (
                   <div style={{
-                    marginTop: '0.5rem',
-                    padding: '0.65rem 0.85rem',
+                    marginTop: '0.65rem',
+                    padding: '0.85rem',
                     borderRadius: '8px',
                     background: 'rgba(234, 179, 8, 0.12)',
                     border: '1px solid rgba(234, 179, 8, 0.3)',
-                    color: '#eab308',
-                    fontSize: '0.8rem',
-                    lineHeight: '1.4'
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.65rem',
                   }}>
-                    👑 <strong>Super Senior Mode:</strong> Excluded from regular automatic overtime rotation. Only stays on-call during emergency/big shipments (alone, with 1, or with 2 workers).
+                    <div style={{ color: '#eab308', fontSize: '0.82rem', lineHeight: '1.4' }}>
+                      👑 <strong>Super Senior Mode:</strong> Reserved for supervisor-level staff. Stays on-call during emergency/big shipments.
+                    </div>
+
+                    {/* Admin Checkbox: Can do normal pickup */}
+                    {isAdmin && (
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.65rem',
+                          cursor: 'pointer',
+                          padding: '0.55rem 0.75rem',
+                          borderRadius: '6px',
+                          background: empForm.eligible_for_normal_pickup ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                          border: empForm.eligible_for_normal_pickup ? '1.5px solid #22c55e' : '1px solid var(--border-color)',
+                          transition: 'all 0.18s ease',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(empForm.eligible_for_normal_pickup)}
+                          onChange={(e) =>
+                            setEmpForm({ ...empForm, eligible_for_normal_pickup: e.target.checked })
+                          }
+                          style={{ width: '16px', height: '16px', accentColor: '#22c55e', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: empForm.eligible_for_normal_pickup ? '#4ade80' : 'var(--text-primary)' }}>
+                            Can do normal pickup too
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                            Include this Super Senior in standard automatic daily overtime rotation.
+                          </div>
+                        </div>
+                      </label>
+                    )}
+
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {empForm.eligible_for_normal_pickup
+                        ? '✅ Active in rotation: The algorithm will schedule this Super Senior for regular pickups as an anchor.'
+                        : '🔒 On-Call Only: The algorithm will NEVER automatically schedule this Super Senior. Only assigned via Emergency Dispatch.'}
+                    </div>
                   </div>
                 )}
               </div>

@@ -117,7 +117,7 @@ export async function validateCredentials({ passcode, username, supervisorId, po
             id: String(userRow.id),
             name: userRow.name,
             username: userRow.username,
-            role: userRow.role || 'senior',
+            role: userRow.role || 'mod',
           },
         };
       }
@@ -126,7 +126,7 @@ export async function validateCredentials({ passcode, username, supervisorId, po
     }
   }
 
-  return { success: false, message: 'Invalid admin password or senior employee credentials' };
+  return { success: false, message: 'Invalid admin password or Mod passcode' };
 }
 
 /**

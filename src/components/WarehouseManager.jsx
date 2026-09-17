@@ -44,12 +44,12 @@ export default function WarehouseManager({
   const [newUserName, setNewUserName] = useState('');
   const [newUserUsername, setNewUserUsername] = useState('');
   const [newUserPasscode, setNewUserPasscode] = useState('');
-  const [newUserRole, setNewUserRole] = useState('senior');
+  const [newUserRole, setNewUserRole] = useState('mod');
 
   // Edit User form state
   const [editName, setEditName] = useState('');
   const [editPasscode, setEditPasscode] = useState('');
-  const [editRole, setEditRole] = useState('senior');
+  const [editRole, setEditRole] = useState('mod');
   const [editActive, setEditActive] = useState(true);
 
   const fetchUsers = useCallback(async () => {
@@ -101,7 +101,7 @@ export default function WarehouseManager({
       setNewUserName('');
       setNewUserUsername('');
       setNewUserPasscode('');
-      setNewUserRole('senior');
+      setNewUserRole('mod');
       setIsAddUserModalOpen(false);
       fetchUsers();
     } catch (err) {
@@ -113,7 +113,7 @@ export default function WarehouseManager({
     setEditingUser(u);
     setEditName(u.name);
     setEditPasscode(u.passcode);
-    setEditRole(u.role || 'senior');
+    setEditRole(u.role || 'mod');
     setEditActive(u.active);
     setIsEditUserModalOpen(true);
   };
@@ -297,7 +297,7 @@ export default function WarehouseManager({
           <div className="card-header" style={{ marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
             <div className="card-title">
               <UserCog color="var(--accent-purple, #c084fc)" size={22} />
-              Senior User & Passcode Management
+              Mod User & Passcode Management
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <button
@@ -314,13 +314,13 @@ export default function WarehouseManager({
                 style={{ fontWeight: 700 }}
                 onClick={() => setIsAddUserModalOpen(true)}
               >
-                <UserPlus size={14} /> Add Senior User
+                <UserPlus size={14} /> Add Mod User
               </button>
             </div>
           </div>
 
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-            As Administrator, you control senior employee accounts and passwords. Created senior supervisors can sign in with their assigned passcodes to access the calendar, dispatch duties, and update staff.
+            As Administrator, you control Mod (supervisor) accounts and passcodes. Created Mods can sign in with their assigned passcodes to access the calendar, dispatch duties, and update today's status.
           </p>
 
           {userError && (
@@ -341,17 +341,17 @@ export default function WarehouseManager({
             >
               <UserCog size={36} color="var(--text-muted)" style={{ margin: '0 auto 0.5rem auto', opacity: 0.6 }} />
               <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)' }}>
-                No senior employee accounts created yet
+                No Mod employee accounts created yet
               </p>
               <p style={{ margin: '0.35rem 0 1rem 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                Click below to create senior staff accounts with custom passcodes or PINs.
+                Click below to create supervisor Mod accounts with custom passcodes or PINs.
               </p>
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={() => setIsAddUserModalOpen(true)}
               >
-                <UserPlus size={14} /> Create First Senior User
+                <UserPlus size={14} /> Create First Mod User
               </button>
             </div>
           ) : (
@@ -378,7 +378,7 @@ export default function WarehouseManager({
                           {u.name}
                         </div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                          @{u.username} · <span style={{ textTransform: 'capitalize', color: 'var(--accent-purple, #c084fc)', fontWeight: 600 }}>{u.role || 'senior'}</span>
+                          @{u.username} · <span style={{ textTransform: 'capitalize', color: 'var(--accent-purple, #c084fc)', fontWeight: 600 }}>{u.role === 'admin' ? 'Admin' : 'Mod'}</span>
                         </div>
                       </div>
                       <button
@@ -471,65 +471,43 @@ export default function WarehouseManager({
             </div>
           )}
         </div>
-      ) : (
-        <div className="card" style={{ border: '1px solid rgba(56, 189, 248, 0.2)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <ShieldCheck size={20} color="var(--accent-blue)" />
-            <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
-              Logged in as <strong>{authUser?.name || 'Senior Employee'}</strong>. User credentials and accounts are managed by the Administrator.
-            </div>
-          </div>
-        </div>
-      )}
+      ) : null}
 
 
 
       {/* =========================================================================
-          MODAL: MONTHLY DATA EXPORT (BOSS REQUEST: MONTH SELECTOR + PDF/CSV OPTIONS)
+          MODAL: CONFIGURE EXPORT REPORT
           ========================================================================= */}
       {isExportModalOpen && (
         <div className="modal-overlay" onClick={() => setIsExportModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
             <div className="modal-header">
               <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Download size={20} color="var(--accent-blue)" />
-                Download Monthly Data Report
+                Generate Overtime & Pickup Report
               </h3>
               <button className="btn btn-secondary btn-sm" onClick={() => setIsExportModalOpen(false)}>
                 ✕
               </button>
             </div>
 
-            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
-              Select the month and preferred report format. Previous month is selected by default.
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+              Select target month and output format. The exported document contains detailed shift dates, participant names, and attendance statuses.
             </p>
 
             <div className="form-group">
-              <label className="form-label">Which month of data do you want?</label>
+              <label className="form-label">Report Month</label>
               <input
                 type="month"
                 className="form-input"
                 value={exportMonth}
                 onChange={(e) => setExportMonth(e.target.value)}
-                style={{ fontSize: '1rem', fontWeight: 700 }}
-                required
               />
-              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
-                * Defaults to previous month ({exportMonth}). Change if you need another period.
-              </span>
             </div>
 
-            <div className="form-group" style={{ marginTop: '1.25rem' }}>
-              <label className="form-label">Choose Export Format:</label>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))',
-                  gap: '0.75rem',
-                  marginTop: '0.35rem',
-                }}
-              >
-                {/* PDF Card */}
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label className="form-label">Output File Format</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.35rem' }}>
                 <div
                   onClick={() => setExportFormat('pdf')}
                   style={{
@@ -550,11 +528,10 @@ export default function WarehouseManager({
                   </div>
                   <strong style={{ fontSize: '0.95rem', marginTop: '0.2rem' }}>PDF Document</strong>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Printable executive report with styling & summary
+                    Print-ready formal report for boss or management review
                   </span>
                 </div>
 
-                {/* CSV Card */}
                 <div
                   onClick={() => setExportFormat('csv')}
                   style={{
@@ -620,7 +597,7 @@ export default function WarehouseManager({
       )}
 
       {/* =========================================================================
-          MODAL: ADD SENIOR USER (ADMIN ONLY)
+          MODAL: ADD MOD USER (ADMIN ONLY)
           ========================================================================= */}
       {isAddUserModalOpen && (
         <div className="modal-overlay" onClick={() => setIsAddUserModalOpen(false)}>
@@ -628,7 +605,7 @@ export default function WarehouseManager({
             <div className="modal-header">
               <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <UserPlus size={20} color="var(--accent-purple, #c084fc)" />
-                Add Senior Staff User
+                Add Mod Account
               </h3>
               <button className="btn btn-secondary btn-sm" onClick={() => setIsAddUserModalOpen(false)}>
                 ✕
@@ -671,7 +648,7 @@ export default function WarehouseManager({
                   onChange={(e) => setNewUserPasscode(e.target.value)}
                 />
                 <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
-                  The senior employee will use this passcode to unlock the dispatcher.
+                  The Mod employee will use this passcode to unlock the dispatcher.
                 </span>
               </div>
 
@@ -682,7 +659,7 @@ export default function WarehouseManager({
                   value={newUserRole}
                   onChange={(e) => setNewUserRole(e.target.value)}
                 >
-                  <option value="senior">Senior Supervisor (Rosters & Dispatches)</option>
+                  <option value="mod">Mod (Supervisor: Shift Generation & Confirmation)</option>
                   <option value="admin">Administrator (Full Access & User Management)</option>
                 </select>
               </div>
@@ -696,7 +673,7 @@ export default function WarehouseManager({
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
-                  Create Senior User
+                  Create Mod User
                 </button>
               </div>
             </form>
@@ -705,7 +682,7 @@ export default function WarehouseManager({
       )}
 
       {/* =========================================================================
-          MODAL: EDIT SENIOR USER (ADMIN ONLY)
+          MODAL: EDIT MOD USER (ADMIN ONLY)
           ========================================================================= */}
       {isEditUserModalOpen && editingUser && (
         <div className="modal-overlay" onClick={() => setIsEditUserModalOpen(false)}>
@@ -753,8 +730,8 @@ export default function WarehouseManager({
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value)}
                 >
-                  <option value="senior">Senior Supervisor</option>
-                  <option value="admin">Administrator</option>
+                  <option value="mod">Mod (Supervisor: Shift Generation & Confirmation)</option>
+                  <option value="admin">Administrator (Full Access & User Management)</option>
                 </select>
               </div>
 

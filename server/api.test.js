@@ -545,4 +545,152 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     assert.ok(logRes.rows.length > 0);
     assert.ok(logRes.rows[0].notes.includes('Senior Supervisor acknowledged Head Office key delivery risk'));
   });
+
+  await t.test('Security: Mod login and permission boundaries', async () => {
+    // 1. Create a Mod user
+    await pool.query(`
+      INSERT INTO app_users (username, name, passcode, role, active)
+      VALUES ('__test_mod_user__', 'Test Mod Supervisor', 'pass1234', 'mod', true)
+      ON CONFLICT (username) DO UPDATE SET passcode = 'pass1234', role = 'mod';
+    `);
+
+    // 2. Login as Mod
+    const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passcode: 'pass1234' }),
+    });
+    assert.equal(loginRes.status, 200);
+    const loginData = await loginRes.json();
+    assert.equal(loginData.user.role, 'mod');
+    const modToken = loginData.token;
+
+    const modFetch = (url, opts = {}) =>
+      fetch(url, {
+        ...opts,
+        headers: {
+          ...(opts.headers || {}),
+          Authorization: `Bearer ${modToken}`,
+        },
+      });
+
+    // 3. Mod cannot create Super Senior
+    const addSuperSeniorRes = await modFetch(`${baseUrl}/api/employees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: '__Test_Illegal_SuperSenior__',
+        experience: 'Super Senior',
+        skill: 5,
+        warehouse_id: testWarehouses[0].id,
+      }),
+    });
+    assert.equal(addSuperSeniorRes.status, 403, 'Mod must be forbidden from creating Super Senior');
+
+    // 4. Mod cannot change past date daily status
+    const pastStatusRes = await modFetch(`${baseUrl}/api/daily-status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        warehouse_id: testWarehouses[0].id,
+        duty_date: '2026-09-01',
+        status: 'holiday',
+      }),
+    });
+    assert.equal(pastStatusRes.status, 403, 'Mod must be forbidden from changing past date daily status');
+
+    // 5. Mod CAN change today daily status
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const todayStatusRes = await modFetch(`${baseUrl}/api/daily-status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        warehouse_id: testWarehouses[0].id,
+        duty_date: todayStr,
+        status: 'before_7pm',
+      }),
+    });
+    assert.equal(todayStatusRes.status, 200, "Mod must be allowed to change today's daily status");
+
+    // 6. Mod cannot log historical pickup
+    const histRes = await modFetch(`${baseUrl}/api/historical-pickup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employee_id: testEmployees[0].id,
+        warehouse_id: testWarehouses[0].id,
+        duty_date: '2026-09-05',
+      }),
+    });
+    assert.equal(histRes.status, 403, 'Mod must be forbidden from logging historical pickups');
+
+    // 7. Mod CAN manually assign 1 or 2 workers for today (volunteers)
+    const manualTodayRes = await modFetch(`${baseUrl}/api/assignments/manual-override`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        duty_date: todayStr,
+        employee_ids: [testEmployees[0].id, testEmployees[1].id],
+      }),
+    });
+    assert.equal(manualTodayRes.status, 200, "Mod must be allowed to manually assign crew for today");
+    const manualTodayData = await manualTodayRes.json();
+    assert.equal(manualTodayData.assigned.length, 2);
+
+    // 8. Mod CANNOT manually assign crew for a past date
+    const manualPastRes = await modFetch(`${baseUrl}/api/assignments/manual-override`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        duty_date: '2026-09-01',
+        employee_ids: [testEmployees[0].id],
+      }),
+    });
+    assert.equal(manualPastRes.status, 403, 'Mod must be forbidden from manually assigning past dates');
+
+    // 9. Mod CAN manually assign a Super Senior if eligible_for_normal_pickup = true
+    const superSeniorCandidate = testEmployees.find((e) => e.experience === 'Super Senior');
+    if (superSeniorCandidate) {
+      await pool.query('UPDATE employees SET eligible_for_normal_pickup = true WHERE id = $1', [superSeniorCandidate.id]);
+      const manualSuperRes = await modFetch(`${baseUrl}/api/assignments/manual-override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          duty_date: todayStr,
+          employee_ids: [superSeniorCandidate.id, testEmployees[0].id],
+        }),
+      });
+      assert.equal(manualSuperRes.status, 200, 'Eligible Super Senior can be manually assigned for today');
+    }
+  });
+
+  await t.test('Security: Auto-close unconfirmed past crew as before_7pm', async () => {
+    const pastDate = '2026-09-10';
+    // Insert scheduled assignment on a past date without daily log
+    await pool.query(
+      `INSERT INTO assignments (duty_date, employee_id, warehouse_id, status)
+       VALUES ($1, $2, $3, 'scheduled')
+       ON CONFLICT (employee_id, duty_date) DO UPDATE SET status = 'scheduled'`,
+      [pastDate, testEmployees[0].id, testWarehouses[0].id]
+    );
+
+    // Call bootstrap to trigger auto-close
+    const bootRes = await apiFetch(`${baseUrl}/api/bootstrap`);
+    assert.equal(bootRes.status, 200);
+
+    // Verify daily_logs was automatically marked before_7pm
+    const logRes = await pool.query(
+      `SELECT status, notes FROM daily_logs WHERE duty_date = $1`,
+      [pastDate]
+    );
+    assert.equal(logRes.rows[0]?.status, 'before_7pm');
+    assert.ok(logRes.rows[0]?.notes?.includes('Auto-closed'));
+
+    // Verify scheduled assignment was cleaned up
+    const assignRes = await pool.query(
+      `SELECT count(*) FROM assignments WHERE duty_date = $1 AND status = 'scheduled'`,
+      [pastDate]
+    );
+    assert.equal(Number(assignRes.rows[0].count), 0, 'Unconfirmed scheduled assignments must be cleared');
+  });
 });

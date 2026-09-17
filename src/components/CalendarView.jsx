@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -29,6 +29,7 @@ export default function CalendarView({
   employees = [],
   dailyRequirements = [],
   dailyLogs = [],
+  authUser = null,
   onUpdateStatus,
   onUpdateDailyStatus,
   onReportAbsence,
@@ -39,7 +40,9 @@ export default function CalendarView({
   onDeleteHistoricalPickup,
   onToggleEmergencySunday,
   onGeneratePlan,
+  onManualOverride,
 }) {
+  const isAdmin = authUser?.role === 'admin';
   const getTodayDateStr = () => {
     const now = new Date();
     const y = now.getFullYear();
@@ -72,6 +75,27 @@ export default function CalendarView({
   const [backfillEmpId1, setBackfillEmpId1] = useState('');
   const [backfillEmpId2, setBackfillEmpId2] = useState('');
   const [isSubmittingBackfill, setIsSubmittingBackfill] = useState(false);
+
+  // Volunteer & Manual Pick Modal State
+  const [isManualPickModalOpen, setIsManualPickModalOpen] = useState(false);
+  const [manualSlot1, setManualSlot1] = useState('');
+  const [manualSlot2, setManualSlot2] = useState('');
+  const [isSubmittingManualPick, setIsSubmittingManualPick] = useState(false);
+  const [manualPickError, setManualPickError] = useState(null);
+
+  // Eligible employees for manual pick (active, not archived, and not strictly on-call Super Senior)
+  const manualPickEligible = useMemo(
+    () =>
+      employees
+        .filter(
+          (e) =>
+            e.active &&
+            !e.archived &&
+            (e.experience !== 'Super Senior' || Boolean(e.eligible_for_normal_pickup))
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [employees]
+  );
 
   // Loading & Feedback states
   const [isConfirmingToday, setIsConfirmingToday] = useState(false);
@@ -152,7 +176,12 @@ export default function CalendarView({
     const hasAbsent = dayAssignments.some((a) => a.status === 'absent');
 
     if (hasCompleted) return { type: 'overtime_stay' };
-    if (hasScheduled) return { type: 'scheduled' };
+    if (hasScheduled) {
+      if (dateStr < todayStr) {
+        return { type: 'before_7pm', notes: 'Unconfirmed shift auto-closed as Before 7pm (No OT)' };
+      }
+      return { type: 'scheduled' };
+    }
     if (hasAbsent && !hasCompleted) return { type: 'no_pickup' };
 
     // 3. Sunday Rule: Sundays default to Sunday Off (standard weekly closure)
@@ -218,6 +247,10 @@ export default function CalendarView({
 
   // Handlers
   const handleSetDayOutcome = async (newStatus) => {
+    if (selectedDateStr < todayStr && !isAdmin) {
+      alert('Only administrators can modify the status of past dates.');
+      return;
+    }
     await onUpdateDailyStatus(activeWarehouse.id, selectedDateStr, newStatus);
     showToast(`Marked facility outcome as "${newStatus.replace('_', ' ')}"`);
   };
@@ -369,6 +402,10 @@ export default function CalendarView({
 
   const handleToggleSundayEmergency = async (enabled) => {
     if (!onToggleEmergencySunday) return;
+    if (selectedDateStr < todayStr && !isAdmin) {
+      alert('Only administrators can modify Sunday emergency status for past dates.');
+      return;
+    }
     try {
       await onToggleEmergencySunday(selectedDateStr, enabled);
       showToast(
@@ -378,6 +415,50 @@ export default function CalendarView({
       );
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  const handleOpenManualPickModal = () => {
+    if (selectedDateStr < todayStr && !isAdmin) {
+      alert('Only administrators can assign staff for past dates.');
+      return;
+    }
+    // Prefill currently scheduled employees if any
+    const existing = selectedAssignments.filter((a) => a.experience !== 'Super Senior');
+    setManualSlot1(existing[0]?.employee_id ? String(existing[0].employee_id) : '');
+    setManualSlot2(existing[1]?.employee_id ? String(existing[1].employee_id) : '');
+    setManualPickError(null);
+    setIsManualPickModalOpen(true);
+  };
+
+  const handleSubmitManualPick = async (e) => {
+    e?.preventDefault();
+    if (!manualSlot1) {
+      setManualPickError('Please select at least one employee for Slot 1.');
+      return;
+    }
+    if (manualSlot2 && String(manualSlot1) === String(manualSlot2)) {
+      setManualPickError('Slot 1 and Slot 2 cannot be the same person.');
+      return;
+    }
+
+    setIsSubmittingManualPick(true);
+    setManualPickError(null);
+    try {
+      if (onManualOverride) {
+        const ids = [manualSlot1];
+        if (manualSlot2) ids.push(manualSlot2);
+        await onManualOverride({
+          duty_date: selectedDateStr,
+          employee_ids: ids.map(Number),
+        });
+        showToast(`Crew manually assigned for ${selectedDateStr}!`);
+        setIsManualPickModalOpen(false);
+      }
+    } catch (err) {
+      setManualPickError(err.message || 'Failed to assign manual crew');
+    } finally {
+      setIsSubmittingManualPick(false);
     }
   };
 
@@ -665,7 +746,7 @@ export default function CalendarView({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {isPastDate && (
+              {isPastDate && isAdmin && (
                 <button
                   type="button"
                   className="btn-backfill"
@@ -681,13 +762,35 @@ export default function CalendarView({
 
           {/* Quick Outcome Toggles */}
           <div className="outcome-selector-box" style={{ marginBottom: '1.25rem' }}>
-            <span className="outcome-label">Facility Pickup Outcome:</span>
-            <div className="outcome-buttons-group">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <span className="outcome-label">Facility Pickup Outcome:</span>
+              {isPastDate && !isAdmin && (
+                <span
+                  style={{
+                    fontSize: '0.75rem',
+                    color: '#f59e0b',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '999px',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    fontWeight: 600,
+                  }}
+                  title="Past dates are locked for data safety. Only Administrator can modify them."
+                >
+                  🔒 Past day locked (Admin only)
+                </span>
+              )}
+            </div>
+            <div
+              className="outcome-buttons-group"
+              style={isPastDate && !isAdmin ? { opacity: 0.55, pointerEvents: 'none' } : {}}
+            >
               <button
                 type="button"
                 className={`outcome-btn btn-overtime ${selectedStatus.type === 'overtime_stay' ? 'active' : ''}`}
                 onClick={() => handleSetDayOutcome('overtime_stay')}
-                title="Truck arrived after hours; 1 person stayed overtime"
+                disabled={isPastDate && !isAdmin}
+                title={isPastDate && !isAdmin ? 'Past day status can only be modified by Administrator' : 'Truck arrived after hours; 1 person stayed overtime'}
               >
                 <CheckCircle2 size={14} /> OverTime Stay
               </button>
@@ -695,7 +798,8 @@ export default function CalendarView({
                 type="button"
                 className={`outcome-btn btn-before7pm ${selectedStatus.type === 'before_7pm' ? 'active' : ''}`}
                 onClick={() => handleSetDayOutcome('before_7pm')}
-                title="Done during regular hours before 7pm; no overtime needed"
+                disabled={isPastDate && !isAdmin}
+                title={isPastDate && !isAdmin ? 'Past day status can only be modified by Administrator' : 'Done during regular hours before 7pm; no overtime needed'}
               >
                 <Clock size={14} /> Before 7pm (No OT)
               </button>
@@ -703,7 +807,8 @@ export default function CalendarView({
                 type="button"
                 className={`outcome-btn btn-nopickup ${selectedStatus.type === 'no_pickup' ? 'active' : ''}`}
                 onClick={() => handleSetDayOutcome('no_pickup')}
-                title="No delivery arrived; no pickup done"
+                disabled={isPastDate && !isAdmin}
+                title={isPastDate && !isAdmin ? 'Past day status can only be modified by Administrator' : 'No delivery arrived; no pickup done'}
               >
                 <XCircle size={14} /> No Pickup
               </button>
@@ -711,7 +816,8 @@ export default function CalendarView({
                 type="button"
                 className={`outcome-btn btn-holiday ${selectedStatus.type === 'holiday' ? 'active' : ''}`}
                 onClick={() => handleSetDayOutcome('holiday')}
-                title="Entire warehouse was closed for holiday"
+                disabled={isPastDate && !isAdmin}
+                title={isPastDate && !isAdmin ? 'Past day status can only be modified by Administrator' : 'Entire warehouse was closed for holiday'}
               >
                 <Coffee size={14} /> Holiday
               </button>
@@ -814,14 +920,16 @@ export default function CalendarView({
                 <span style={{ fontSize: '0.82rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
                   Recorded Overtime Pickups on This Date:
                 </span>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => handleOpenBackfillModal(selectedDateStr)}
-                  style={{ fontSize: '0.78rem' }}
-                >
-                  <Plus size={13} /> Add Past Record
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handleOpenBackfillModal(selectedDateStr)}
+                    style={{ fontSize: '0.78rem' }}
+                  >
+                    <Plus size={13} /> Add Past Record
+                  </button>
+                )}
               </div>
 
               {selectedAssignments.filter((a) => a.status === 'completed').length > 0 ? (
@@ -852,15 +960,17 @@ export default function CalendarView({
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          style={{ color: 'var(--accent-red)', padding: '0.35rem 0.6rem' }}
-                          onClick={() => handleDeleteHistoricalRecord(a.id)}
-                          title="Remove this historical record"
-                        >
-                          <Trash2 size={14} /> Remove
-                        </button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ color: 'var(--accent-red)', padding: '0.35rem 0.6rem' }}
+                            onClick={() => handleDeleteHistoricalRecord(a.id)}
+                            title="Remove this historical record"
+                          >
+                            <Trash2 size={14} /> Remove
+                          </button>
+                        )}
                       </div>
                     ))}
                 </div>
@@ -983,6 +1093,27 @@ export default function CalendarView({
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
+                        onClick={handleOpenManualPickModal}
+                        disabled={isPastDate && !isAdmin}
+                        style={{
+                          fontSize: '0.78rem',
+                          padding: '0.28rem 0.65rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          fontWeight: 700,
+                          background: 'rgba(245, 158, 11, 0.12)',
+                          border: '1px solid rgba(245, 158, 11, 0.4)',
+                          color: '#f59e0b',
+                        }}
+                        title={isPastDate && !isAdmin ? 'Only Admin can assign past dates' : "Assign volunteers or manually pick staff for today"}
+                      >
+                        <UserCheck size={13} /> <span>🙋 Volunteer / Pick</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
                         onClick={() => handleOpenSuperSeniorModal(selectedDateStr)}
                         style={{
                           background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.2))',
@@ -1046,16 +1177,36 @@ export default function CalendarView({
                   <div>
                     {selectedAssignments.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '0.85rem' }}>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '1rem' }}>
                           No overtime workers selected yet for this date.
                         </p>
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          onClick={() => handleQuickAutoSelect()}
-                        >
-                          <Sparkles size={14} /> Auto-Select Today's Overtime Crew (2 Workers)
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => handleQuickAutoSelect()}
+                            disabled={isPastDate && !isAdmin}
+                            style={{ minHeight: '40px', padding: '0.5rem 1rem' }}
+                          >
+                            <Sparkles size={14} /> Auto-Select Today's Crew
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={handleOpenManualPickModal}
+                            disabled={isPastDate && !isAdmin}
+                            style={{
+                              background: 'rgba(245, 158, 11, 0.12)',
+                              border: '1px solid rgba(245, 158, 11, 0.4)',
+                              color: '#f59e0b',
+                              fontWeight: 700,
+                              minHeight: '40px',
+                              padding: '0.5rem 1rem',
+                            }}
+                          >
+                            <UserCheck size={14} /> 🙋 Volunteer / Manual Pick
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       selectedAssignments.map((a) => {
@@ -1316,6 +1467,24 @@ export default function CalendarView({
                             <UserCheck size={18} />
                             <span>{isConfirmingToday ? 'Confirming Overtime Stay...' : '✓ Confirm Those 2 Will Really Stay Today'}</span>
                           </button>
+
+                          <div style={{
+                            marginTop: '0.65rem',
+                            padding: '0.55rem 0.8rem',
+                            borderRadius: '8px',
+                            background: 'rgba(245, 158, 11, 0.1)',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                            color: '#fbbf24',
+                            fontSize: '0.78rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                          }}>
+                            <Clock size={15} style={{ flexShrink: 0 }} />
+                            <span>
+                              <strong>Safety Rule:</strong> If not confirmed today, this shift will automatically close as <em>Before 7pm (No OT)</em> and will not count towards overtime.
+                            </span>
+                          </div>
                         </div>
                       </>
                     )
@@ -1675,6 +1844,131 @@ export default function CalendarView({
                     : superSeniorCrewMode === 'remove'
                     ? 'Remove Super Senior'
                     : 'Confirm Super Senior Duty'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL: VOLUNTEER / MANUAL OVERTIME PICK (TODAY & UPCOMING DATES)
+          ========================================================================= */}
+      {isManualPickModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsManualPickModalOpen(false)}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '460px', width: '92%' }}
+          >
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <UserCheck size={20} color="#f59e0b" />
+                Assign Overtime Volunteer / Manual Pick
+              </h3>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsManualPickModalOpen(false)}
+                style={{ padding: '0.2rem 0.5rem' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: '1.2rem', lineHeight: 1.5 }}>
+              If someone volunteered for overtime money or the supervisor manually assigns staff, select them below.
+              This <strong>replaces</strong> the automatically generated schedule for this date.
+            </p>
+
+            <form onSubmit={handleSubmitManualPick}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontSize: '0.84rem',
+                  color: 'var(--text-muted)',
+                  marginBottom: '1.1rem',
+                  background: 'var(--bg-surface-elevated)',
+                  padding: '0.5rem 0.85rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                <CalendarIcon size={14} color="#f59e0b" />
+                <span>Duty Date: <strong style={{ color: 'var(--text-primary)' }}>{selectedDateStr}</strong></span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ color: '#f59e0b', fontWeight: 700 }}>
+                  Slot 1 — Volunteer / Assigned Worker (Required)
+                </label>
+                <select
+                  className="form-select"
+                  value={manualSlot1}
+                  onChange={(e) => {
+                    setManualSlot1(e.target.value);
+                    setManualPickError(null);
+                  }}
+                  required
+                >
+                  <option value="">— Select employee —</option>
+                  {manualPickEligible.map((emp) => (
+                    <option key={emp.id} value={emp.id} disabled={String(emp.id) === manualSlot2}>
+                      {emp.name} ({emp.experience} · Skill {emp.skill}/5) {emp.can_hold_key ? '🔑' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  Slot 2 — Partner Worker (Optional)
+                </label>
+                <select
+                  className="form-select"
+                  value={manualSlot2}
+                  onChange={(e) => {
+                    setManualSlot2(e.target.value);
+                    setManualPickError(null);
+                  }}
+                >
+                  <option value="">— Leave empty for solo assignment —</option>
+                  {manualPickEligible.map((emp) => (
+                    <option key={emp.id} value={emp.id} disabled={String(emp.id) === manualSlot1}>
+                      {emp.name} ({emp.experience} · Skill {emp.skill}/5) {emp.can_hold_key ? '🔑' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {manualPickError && (
+                <div className="alert-box alert-warning" style={{ marginTop: '0.85rem' }}>
+                  <AlertTriangle size={16} />
+                  <span>{manualPickError}</span>
+                </div>
+              )}
+
+              <div className="modal-footer" style={{ marginTop: '1.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsManualPickModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={isSubmittingManualPick || !manualSlot1}
+                  style={{
+                    background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)',
+                    color: '#fff',
+                    fontWeight: 700,
+                  }}
+                >
+                  {isSubmittingManualPick ? 'Assigning...' : 'Confirm Assignment'}
                 </button>
               </div>
             </form>

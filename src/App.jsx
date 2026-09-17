@@ -12,6 +12,10 @@ import {
   ShieldCheck,
   LogOut,
   Lock,
+  Download,
+  Smartphone,
+  Share2,
+  X,
 } from 'lucide-react';
 import CalendarView from './components/CalendarView.jsx';
 import PlanGenerator from './components/PlanGenerator.jsx';
@@ -219,6 +223,44 @@ function MainApp() {
   const [generatorDate, setGeneratorDate] = useState(null);
   const [generatorWarehouseId, setGeneratorWarehouseId] = useState(null);
 
+  // Progressive Web App (PWA) Install Handling
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [showIOSInstallModal, setShowIOSInstallModal] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isRunningStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+    setIsStandalone(Boolean(isRunningStandalone));
+
+    const ua = window.navigator.userAgent.toLowerCase();
+    const isIosDevice = /iphone|ipad|ipod/.test(ua) && !window.MSStream;
+    setIsIOS(isIosDevice);
+
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else if (isIOS) {
+      setShowIOSInstallModal(true);
+    }
+  };
+
   const fetchBootstrapData = useCallback(async () => {
     if (!authToken) return;
     try {
@@ -393,6 +435,19 @@ function MainApp() {
     }
     return json;
   };
+
+  const handleManualOverride = async ({ duty_date, employee_ids }) => {
+    const res = await authFetch('/api/assignments/manual-override', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duty_date, employee_ids }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Manual override failed');
+    await fetchBootstrapData();
+    return json;
+  };
+
 
   const handleAddEmployee = async (formData) => {
     const res = await authFetch('/api/employees', {
@@ -601,6 +656,49 @@ function MainApp() {
               <span className="nav-btn-text">Refresh</span>
             </button>
 
+            {/* Install PWA App Button */}
+            {!isStandalone && (deferredPrompt || isIOS) && (
+              <button
+                className="btn btn-primary btn-sm nav-btn-install"
+                onClick={handleInstallClick}
+                title="Install PickUp App on your phone"
+                style={{
+                  background: 'linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '0.35rem 0.65rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  boxShadow: '0 2px 10px rgba(56, 189, 248, 0.35)',
+                }}
+              >
+                <Download size={13} />
+                <span className="nav-btn-text">Install App</span>
+              </button>
+            )}
+
+            {/* User Role Badge */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.25rem 0.65rem',
+                borderRadius: '999px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                background: authUser?.role === 'admin' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(168, 85, 247, 0.12)',
+                border: authUser?.role === 'admin' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(168, 85, 247, 0.3)',
+                color: authUser?.role === 'admin' ? 'var(--accent-blue)' : '#c084fc',
+              }}
+              title={authUser?.role === 'admin' ? 'Administrator Master Account' : `Mod Account: ${authUser?.name}`}
+            >
+              {authUser?.role === 'admin' ? '🛡️ Admin' : `👤 Mod: ${authUser?.name || 'Staff'}`}
+            </div>
+
             {/* Lock / Log Out Button */}
             <button
               className="btn btn-secondary btn-sm nav-btn-lock"
@@ -630,29 +728,34 @@ function MainApp() {
                 employees={data.employees}
                 dailyRequirements={data.dailyRequirements}
                 dailyLogs={data.dailyLogs || []}
-                onUpdateStatus={handleUpdateAssignmentStatus}
+                authUser={authUser}
                 onUpdateDailyStatus={handleUpdateDailyStatus}
+                onUpdateAssignmentStatus={handleUpdateAssignmentStatus}
                 onReportAbsence={handleReportAbsence}
                 onConfirmToday={handleConfirmToday}
                 onAssignSuperSenior={handleAssignSuperSenior}
                 onSwapWarehouses={handleSwapWarehouses}
                 onLogHistoricalPickup={handleLogHistoricalPickup}
-              onDeleteHistoricalPickup={handleDeleteHistoricalPickup}
-              onToggleEmergencySunday={handleToggleEmergencySunday}
-              onGeneratePlan={handleGeneratePlan}
-              onOpenPlanGenerator={handleOpenPlanGenerator}
-            />
-          )}
+                onDeleteHistoricalPickup={handleDeleteHistoricalPickup}
+                onToggleEmergencySunday={handleToggleEmergencySunday}
+                onGeneratePlan={handleGeneratePlan}
+                onOpenPlanGenerator={handleOpenPlanGenerator}
+                onManualOverride={handleManualOverride}
+              />
+            )}
 
           {activeTab === 'generator' && (
             <PlanGenerator
               warehouses={data.warehouses}
+              employees={data.employees}
               dailyRequirements={data.dailyRequirements}
               initialDate={generatorDate}
               initialWarehouseId={generatorWarehouseId}
               onSaveRequirement={handleSaveRequirement}
               onGeneratePlan={handleGeneratePlan}
+              onManualOverride={handleManualOverride}
               onViewCalendar={() => setActiveTab('calendar')}
+              authUser={authUser}
             />
           )}
 
@@ -661,6 +764,7 @@ function MainApp() {
               employees={data.employees}
               warehouses={data.warehouses}
               absences={data.absences}
+              authUser={authUser}
               onAddEmployee={handleAddEmployee}
               onUpdateEmployee={handleUpdateEmployee}
               onDeleteEmployee={handleDeleteEmployee}
@@ -692,7 +796,53 @@ function MainApp() {
         </div>
       </main>
 
-      {/* Mobile Bottom Navigation Bar (Thumb-Friendly, Fixed Bottom) */}
+      {/* iOS Safari Install Guide Modal */}
+      {showIOSInstallModal && (
+        <div className="modal-overlay" onClick={() => setShowIOSInstallModal(false)}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '420px', padding: '1.5rem' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.1rem' }}>
+                <Smartphone color="var(--accent-blue)" size={22} />
+                <span>Install on Phone (iOS)</span>
+              </div>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowIOSInstallModal(false)}
+                style={{ padding: '0.25rem 0.5rem', minWidth: '32px' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+              To install PickUp as a standalone app on your iPhone or iPad:
+            </p>
+            <ol style={{ paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+              <li>
+                Tap the <strong>Share</strong> button <Share2 size={14} style={{ display: 'inline', verticalAlign: 'middle', margin: '0 2px' }} /> in the Safari toolbar.
+              </li>
+              <li>
+                Scroll down and tap <strong>Add to Home Screen</strong>.
+              </li>
+              <li>
+                Tap <strong>Add</strong> in the top-right corner.
+              </li>
+            </ol>
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: '1.5rem', justifyContent: 'center' }}
+              onClick={() => setShowIOSInstallModal(false)}
+            >
+              Got It!
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Bottom Navigation Bar (Fixed 5-Tab Bar) */}
       <nav className="mobile-bottom-bar" aria-label="Mobile Navigation">
         <button
           type="button"
@@ -700,9 +850,20 @@ function MainApp() {
           onClick={() => setActiveTab('calendar')}
         >
           <div className="mobile-nav-icon-pod">
-            <Calendar size={19} />
+            <Calendar size={18} />
           </div>
           <span>Dispatch</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'generator' ? 'active' : ''}`}
+          onClick={() => setActiveTab('generator')}
+        >
+          <div className="mobile-nav-icon-pod">
+            <Sparkles size={18} />
+          </div>
+          <span>Plan</span>
         </button>
 
         <button
@@ -711,7 +872,7 @@ function MainApp() {
           onClick={() => setActiveTab('employees')}
         >
           <div className="mobile-nav-icon-pod">
-            <Users size={19} />
+            <Users size={18} />
           </div>
           <span>Staff</span>
         </button>
@@ -722,9 +883,9 @@ function MainApp() {
           onClick={() => setActiveTab('analytics')}
         >
           <div className="mobile-nav-icon-pod">
-            <BarChart3 size={19} />
+            <BarChart3 size={18} />
           </div>
-          <span>Equity</span>
+          <span>Fairness</span>
         </button>
 
         <button
@@ -733,7 +894,7 @@ function MainApp() {
           onClick={() => setActiveTab('warehouses')}
         >
           <div className="mobile-nav-icon-pod">
-            <Building2 size={19} />
+            <Building2 size={18} />
           </div>
           <span>Settings</span>
         </button>

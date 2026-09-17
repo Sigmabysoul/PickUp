@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Calendar,
   Sparkles,
@@ -8,16 +8,21 @@ import {
   ShieldCheck,
   Building2,
   ArrowRight,
+  UserCheck,
+  Pencil,
 } from 'lucide-react';
 
 export default function PlanGenerator({
   warehouses = [],
+  employees = [],
   dailyRequirements = [],
   initialDate,
   initialWarehouseId,
   onSaveRequirement,
   onGeneratePlan,
+  onManualOverride,
   onViewCalendar,
+  authUser = null,
 }) {
   const [dutyDate, setDutyDate] = useState(() => {
     if (initialDate) return initialDate;
@@ -46,6 +51,27 @@ export default function PlanGenerator({
   const [previewResult, setPreviewResult] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+
+  // ── Manual Override State ──────────────────────────────────────────────────
+  const [manualSlot1, setManualSlot1] = useState('');
+  const [manualSlot2, setManualSlot2] = useState('');
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualSuccess, setManualSuccess] = useState(null);
+  const [manualError, setManualError] = useState(null);
+
+  // Eligible employees for the dropdown: active, not archived, and not strictly on-call Super Senior
+  const overrideEligible = useMemo(
+    () =>
+      employees
+        .filter(
+          (e) =>
+            e.active &&
+            !e.archived &&
+            (e.experience !== 'Super Senior' || Boolean(e.eligible_for_normal_pickup))
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [employees]
+  );
 
   const handleReqChange = (whId, val) => {
     const num = Math.max(1, Math.min(10, parseInt(val, 10) || 2));
@@ -99,8 +125,52 @@ export default function PlanGenerator({
     }
   };
 
+  const handleManualAssign = async () => {
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const isPastDate = dutyDate < todayStr;
+    if (isPastDate && !isAdmin) {
+      setManualError('Past date manual assignment is restricted to Administrator. Mods can assign for today and upcoming dates.');
+      return;
+    }
+
+    if (!manualSlot1) {
+      setManualError('Please select at least one employee for Slot 1.');
+      return;
+    }
+    if (manualSlot2 && manualSlot2 === manualSlot1) {
+      setManualError('Slot 1 and Slot 2 cannot be the same person.');
+      return;
+    }
+
+    setManualLoading(true);
+    setManualError(null);
+    setManualSuccess(null);
+
+    try {
+      const ids = [manualSlot1];
+      if (manualSlot2) ids.push(manualSlot2);
+
+      const result = await onManualOverride({
+        duty_date: dutyDate,
+        employee_ids: ids.map(Number),
+      });
+
+      setManualSuccess(result.message || `Assigned successfully for ${dutyDate}`);
+      // Clear selections after success
+      setManualSlot1('');
+      setManualSlot2('');
+    } catch (err) {
+      setManualError(err.message || 'Manual override failed');
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
+  const isAdmin = authUser?.role === 'admin';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* ── Automated Generator ─────────────────────────────────────────────── */}
       <div className="card">
         <div className="card-header">
           <div className="card-title">
@@ -137,6 +207,7 @@ export default function PlanGenerator({
                 setDutyDate(e.target.value);
                 setPreviewResult(null);
                 setSuccessMessage(null);
+                setManualSuccess(null);
               }}
             />
           </div>
@@ -251,6 +322,159 @@ export default function PlanGenerator({
           </div>
         )}
       </div>
+
+      {/* ── Manual Override (Admin & Mod) ─────────────────────────────────────── */}
+      <div className="card" style={{ border: '1px solid rgba(245, 158, 11, 0.35)' }}>
+        <div className="card-header">
+          <div className="card-title">
+            <Pencil color="#f59e0b" size={21} />
+            Manual Staff & Volunteer Override
+          </div>
+          <span
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              color: '#f59e0b',
+              background: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              padding: '0.2rem 0.6rem',
+              borderRadius: '999px',
+            }}
+          >
+            VOLUNTEER & MANUAL PICK
+          </span>
+        </div>
+
+        {dutyDate < (new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) && !isAdmin && (
+          <div className="alert-box alert-warning" style={{ marginBottom: '1.25rem' }}>
+            <AlertTriangle size={16} />
+            <span>Past date editing is locked. Only Administrator can modify past days. Mods can assign volunteers for today or upcoming dates.</span>
+          </div>
+        )}
+
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.25rem', lineHeight: 1.55 }}>
+            Manually assign 1 or 2 specific employees for the selected date — for example, when
+            someone volunteers for overtime. This <strong>replaces</strong> any previously
+            auto-generated schedule for that day. Uses the same date selected above.
+          </p>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
+              gap: '1rem',
+              marginBottom: '1.25rem',
+            }}
+          >
+            {/* Slot 1 */}
+            <div className="form-group">
+              <label className="form-label" style={{ color: '#f59e0b' }}>
+                Slot 1 — Employee (Required)
+              </label>
+              <select
+                className="form-select"
+                value={manualSlot1}
+                onChange={(e) => { setManualSlot1(e.target.value); setManualError(null); setManualSuccess(null); }}
+              >
+                <option value="">— Select employee —</option>
+                {overrideEligible.map((emp) => (
+                  <option key={emp.id} value={emp.id} disabled={String(emp.id) === manualSlot2}>
+                    {emp.name} ({emp.experience} · Skill {emp.skill}/5)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Slot 2 */}
+            <div className="form-group">
+              <label className="form-label" style={{ color: 'var(--text-secondary)' }}>
+                Slot 2 — Employee (Optional)
+              </label>
+              <select
+                className="form-select"
+                value={manualSlot2}
+                onChange={(e) => { setManualSlot2(e.target.value); setManualError(null); setManualSuccess(null); }}
+              >
+                <option value="">— Leave empty for solo assignment —</option>
+                {overrideEligible.map((emp) => (
+                  <option key={emp.id} value={emp.id} disabled={String(emp.id) === manualSlot1}>
+                    {emp.name} ({emp.experience} · Skill {emp.skill}/5)
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Date reminder */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.82rem',
+              color: 'var(--text-muted)',
+              marginBottom: '1.1rem',
+              background: 'var(--bg-surface-elevated)',
+              padding: '0.5rem 0.85rem',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            <Calendar size={14} color="#f59e0b" />
+            Assigning for: <strong style={{ color: 'var(--text-primary)' }}>{dutyDate}</strong>
+            &nbsp;·&nbsp;
+            {manualSlot1
+              ? overrideEligible.find((e) => String(e.id) === String(manualSlot1))?.name
+              : 'No one selected'}
+            {manualSlot2 &&
+              ` & ${overrideEligible.find((e) => String(e.id) === String(manualSlot2))?.name || ''}`}
+          </div>
+
+          <button
+            className="btn"
+            style={{
+              background: manualLoading || !manualSlot1
+                ? 'var(--bg-surface-elevated)'
+                : 'rgba(245, 158, 11, 0.15)',
+              color: manualLoading || !manualSlot1 ? 'var(--text-muted)' : '#f59e0b',
+              border: '1px solid rgba(245, 158, 11, 0.4)',
+              fontWeight: 700,
+              cursor: manualLoading || !manualSlot1 ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.6rem 1.25rem',
+            }}
+            onClick={handleManualAssign}
+            disabled={manualLoading || !manualSlot1 || (dutyDate < (new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) && !isAdmin)}
+          >
+            <UserCheck size={17} />
+            {manualLoading ? 'Assigning...' : 'Assign Manually'}
+          </button>
+
+          {manualError && (
+            <div className="alert-box alert-warning" style={{ marginTop: '1rem' }}>
+              <AlertTriangle size={18} />
+              <span>{manualError}</span>
+            </div>
+          )}
+
+          {manualSuccess && (
+            <div className="alert-box alert-success" style={{ marginTop: '1rem' }}>
+              <Users size={18} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                <span>{manualSuccess}</span>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={onViewCalendar}
+                  style={{ marginLeft: '1rem' }}
+                >
+                  View in Calendar <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
       {/* Preview Section */}
       {previewResult && (

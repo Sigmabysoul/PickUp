@@ -179,10 +179,57 @@ app.delete('/api/users/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// Current date in Asia/Kolkata timezone
+export function getTodayDateStr() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+}
+
+// Security feature: Auto-close any unconfirmed past scheduled crew as 'before_7pm' (No OT)
+export async function autoCloseUnconfirmedPastAssignments(clientOrPool = pool) {
+  try {
+    const todayStr = getTodayDateStr();
+    const pastScheduledRes = await clientOrPool.query(
+      `SELECT DISTINCT to_char(duty_date, 'YYYY-MM-DD') as duty_date
+       FROM assignments
+       WHERE duty_date < $1 AND status = 'scheduled'`,
+      [todayStr]
+    );
+
+    for (const row of pastScheduledRes.rows) {
+      const dDate = row.duty_date;
+      const logRes = await clientOrPool.query(
+        `SELECT status FROM daily_logs WHERE duty_date = $1`,
+        [dDate]
+      );
+      const currentStatus = logRes.rows[0]?.status;
+
+      if (currentStatus !== 'overtime_stay') {
+        await clientOrPool.query(
+          `INSERT INTO daily_logs (warehouse_id, duty_date, status, notes)
+           VALUES (NULL, $1, 'before_7pm', 'Auto-closed: Unconfirmed shift automatically marked as Before 7pm (No OT)')
+           ON CONFLICT (warehouse_id, duty_date)
+           DO UPDATE SET status = 'before_7pm', notes = 'Auto-closed: Unconfirmed shift automatically marked as Before 7pm (No OT)'
+           WHERE daily_logs.status IS DISTINCT FROM 'overtime_stay'`,
+          [dDate]
+        );
+
+        await clientOrPool.query(
+          `DELETE FROM assignments WHERE duty_date = $1 AND status = 'scheduled'`,
+          [dDate]
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Error auto-closing unconfirmed assignments:', err.message);
+  }
+}
+
 // Initialize DB schema on startup
-initDb().catch((err) => {
-  console.error('Database initialization warning:', err.message);
-});
+initDb()
+  .then(() => autoCloseUnconfirmedPastAssignments(pool))
+  .catch((err) => {
+    console.error('Database initialization warning:', err.message);
+  });
 
 // Helper: check absence on specific date
 function isEmployeeAbsentOnDate(absences, employeeId, dutyDate) {
@@ -205,6 +252,9 @@ app.get('/api/bootstrap', async (req, res) => {
         error: 'DATABASE_URL is missing in environment variables. Please add your Neon connection string in your Vercel Project Settings (Settings -> Environment Variables).'
       });
     }
+
+    // Auto-close any unconfirmed past scheduled assignments
+    await autoCloseUnconfirmedPastAssignments(pool);
 
     let warehousesRes;
     try {
@@ -334,14 +384,19 @@ app.patch('/api/warehouses/:id', async (req, res) => {
   }
 });
 
-// --------------------------------------------------------------------------
-// 3. Employees API
-// --------------------------------------------------------------------------
 app.post('/api/employees', async (req, res) => {
   try {
     let { warehouse_id, name, experience, skill, active, initial_completed_count, can_hold_key, eligible_for_normal_pickup } = req.body;
     if (!name || !experience || skill == null) {
       return res.status(400).json({ error: 'Missing required employee fields (name, experience, skill)' });
+    }
+
+    // Safety rule: Only administrators can assign Super Senior role or set normal pickup eligibility
+    if (experience === 'Super Senior' && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Only administrators can assign the Super Senior experience level.' });
+    }
+    if (eligible_for_normal_pickup && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Only administrators can modify normal pickup eligibility for Super Seniors.' });
     }
 
     // Default to active warehouse if warehouse_id not provided
@@ -407,6 +462,20 @@ app.patch('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { warehouse_id, name, experience, skill, active, initial_completed_count, can_hold_key, eligible_for_normal_pickup } = req.body;
+
+    // Safety rule: Only administrators can promote to Super Senior or modify normal pickup eligibility
+    if ((experience === 'Super Senior' || eligible_for_normal_pickup !== undefined) && req.user?.role !== 'admin') {
+      const curr = await pool.query('SELECT experience, eligible_for_normal_pickup FROM employees WHERE id = $1', [id]);
+      if (curr.rows.length > 0) {
+        if (experience === 'Super Senior' && curr.rows[0].experience !== 'Super Senior') {
+          return res.status(403).json({ error: 'Forbidden: Only administrators can assign the Super Senior experience level.' });
+        }
+        if (eligible_for_normal_pickup !== undefined && Boolean(eligible_for_normal_pickup) !== Boolean(curr.rows[0].eligible_for_normal_pickup)) {
+          return res.status(403).json({ error: 'Forbidden: Only administrators can modify normal pickup eligibility for Super Seniors.' });
+        }
+      }
+    }
+
     const fields = [];
     const values = [];
     let idx = 1;
@@ -548,6 +617,14 @@ app.put('/api/daily-status', async (req, res) => {
       return res.status(400).json({ error: `status must be one of: ${allowed.join(', ')}` });
     }
 
+    // Safety rule: Only administrators can change status for past dates. Mods can only modify today's status.
+    const todayStr = getTodayDateStr();
+    if (duty_date < todayStr && req.user?.role !== 'admin') {
+      return res.status(403).json({
+        error: "Forbidden: Only administrators can change status for past dates. Mods can only modify today's status.",
+      });
+    }
+
     const whId = warehouse_id ? Number(warehouse_id) : null;
     const result = await pool.query(
       `INSERT INTO daily_logs (warehouse_id, duty_date, status, notes)
@@ -591,6 +668,9 @@ app.post('/api/generate', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Auto-close any unconfirmed past scheduled assignments
+    await autoCloseUnconfirmedPastAssignments(client);
 
     // Advisory lock to serialize generation for target duty date
     await client.query(
@@ -848,9 +928,120 @@ app.post('/api/generate', async (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// 6b. Emergency Super Senior Assignment API (On-Call Big Shipments)
+// 6b. Manual Staff Override — Admin picks specific employees for a duty date
+// --------------------------------------------------------------------------
+app.post('/api/assignments/manual-override', requireAuth, async (req, res) => {
+  const { duty_date, employee_ids } = req.body;
+
+  if (!duty_date) {
+    return res.status(400).json({ error: 'duty_date is required (YYYY-MM-DD)' });
+  }
+  if (!Array.isArray(employee_ids) || employee_ids.length === 0 || employee_ids.length > 2) {
+    return res.status(400).json({ error: 'employee_ids must be an array of 1 or 2 employee IDs' });
+  }
+
+  // Security guardrail: Mods can only assign for today or upcoming dates
+  const todayStr = getTodayDateStr();
+  if (duty_date < todayStr && req.user.role !== 'admin') {
+    return res.status(403).json({
+      error: 'Forbidden: Only Administrator can manually assign past dates. Mods can only assign for today and upcoming dates.',
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Resolve warehouse (Main Warehouse)
+    const whRes = await client.query(
+      "SELECT id, name FROM warehouses WHERE active = true ORDER BY (name = 'Main Warehouse') DESC, id ASC LIMIT 1"
+    );
+    if (!whRes.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'No active warehouse found' });
+    }
+    const warehouse = whRes.rows[0];
+
+    // Validate employees — must exist, be active, not archived, not on-call Super Senior
+    const empRes = await client.query(
+      `SELECT id, name, experience, active, archived, eligible_for_normal_pickup
+       FROM employees
+       WHERE id = ANY($1::int[])`,
+      [employee_ids.map(Number)]
+    );
+    const empMap = new Map(empRes.rows.map((e) => [String(e.id), e]));
+
+    const invalid = [];
+    for (const eid of employee_ids) {
+      const emp = empMap.get(String(eid));
+      if (!emp) invalid.push(`Employee ID ${eid} not found`);
+      else if (emp.archived) invalid.push(`${emp.name} is archived`);
+      else if (!emp.active) invalid.push(`${emp.name} is inactive`);
+      else if (emp.experience === 'Super Senior' && !emp.eligible_for_normal_pickup) {
+        invalid.push(`${emp.name} is Super Senior (On-Call only) — enable "Can do normal pickup" or use Emergency Dispatch`);
+      }
+    }
+    if (invalid.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: invalid.join('; ') });
+    }
+
+    // Delete existing scheduled assignments for this date (preserve absent/completed)
+    await client.query(
+      `DELETE FROM assignments
+       WHERE duty_date = $1 AND status = 'scheduled'
+         AND employee_id NOT IN (SELECT id FROM employees WHERE experience = 'Super Senior')`,
+      [duty_date]
+    );
+
+    // Insert manual assignments
+    const assignedNames = [];
+    for (const eid of employee_ids) {
+      const emp = empMap.get(String(eid));
+      await client.query(
+        `INSERT INTO assignments (employee_id, warehouse_id, duty_date, status)
+         VALUES ($1, $2, $3, 'scheduled')
+         ON CONFLICT (employee_id, duty_date)
+         DO UPDATE SET warehouse_id = $2, status = 'scheduled', updated_at = NOW()
+         WHERE assignments.status = 'scheduled'`,
+        [Number(eid), warehouse.id, duty_date]
+      );
+      assignedNames.push(emp.name);
+    }
+
+    // Log to assignment_runs for audit trail
+    const callerName = req.user.role === 'admin' ? 'admin' : (req.user.name || 'Mod');
+    const warningText = `Manual override by ${callerName}: ${assignedNames.join(' & ')} assigned`;
+    await client.query(
+      `INSERT INTO assignment_runs (warehouse_id, duty_date, warning)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (warehouse_id, duty_date)
+       DO UPDATE SET warning = $3, generated_at = NOW()`,
+      [warehouse.id, duty_date, warningText]
+    );
+
+    await client.query('COMMIT');
+    res.json({
+      duty_date,
+      warehouse_id: warehouse.id,
+      warehouse_name: warehouse.name,
+      assigned: assignedNames,
+      message: `Manually assigned: ${assignedNames.join(' & ')} for ${duty_date}`,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('POST /api/assignments/manual-override error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// --------------------------------------------------------------------------
+// 6c. Emergency Super Senior Assignment API (On-Call Big Shipments)
 // --------------------------------------------------------------------------
 app.post('/api/assignments/super-senior', async (req, res) => {
+
   const { duty_date, super_senior_id, crew_mode = 'with_2' } = req.body;
   if (!duty_date) {
     return res.status(400).json({ error: 'duty_date is required' });
@@ -1117,6 +1308,22 @@ app.patch('/api/assignments/:id', async (req, res) => {
         error: "Status must be one of: 'scheduled', 'completed', 'absent'",
       });
     }
+
+    // Safety rule: Only Administrator can modify assignment records on past dates
+    const check = await pool.query(
+      "SELECT to_char(duty_date, 'YYYY-MM-DD') as duty_date FROM assignments WHERE id = $1",
+      [id]
+    );
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+    const todayStr = getTodayDateStr();
+    if (check.rows[0].duty_date < todayStr && req.user?.role !== 'admin') {
+      return res.status(403).json({
+        error: 'Forbidden: Only administrators can modify assignment records on past dates.',
+      });
+    }
+
     const result = await pool.query(
       `UPDATE assignments
        SET status = $1, updated_at = NOW()
@@ -1124,9 +1331,6 @@ app.patch('/api/assignments/:id', async (req, res) => {
        RETURNING id, employee_id, warehouse_id, to_char(duty_date, 'YYYY-MM-DD') as duty_date, status`,
       [status, id]
     );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Assignment not found' });
-    }
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1364,6 +1568,10 @@ app.post('/api/assignments/swap', async (req, res) => {
 // 7e. Manual Historical Pickup Backfill (For Pre-App History)
 // --------------------------------------------------------------------------
 app.post('/api/historical-pickup', async (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Only administrators can add historical pickup records.' });
+  }
+
   const { employee_id, warehouse_id, duty_date } = req.body;
   if (!employee_id || !warehouse_id || !duty_date) {
     return res.status(400).json({ error: 'employee_id, warehouse_id, and duty_date are required' });
@@ -1424,6 +1632,10 @@ app.post('/api/historical-pickup', async (req, res) => {
 });
 
 app.delete('/api/historical-pickup/:id', async (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Only administrators can delete historical pickup records.' });
+  }
+
   const { id } = req.params;
   const client = await pool.connect();
   try {
@@ -1471,6 +1683,11 @@ app.post('/api/daily-status/emergency-sunday', async (req, res) => {
   const { duty_date, enabled } = req.body;
   if (!duty_date) {
     return res.status(400).json({ error: 'duty_date is required' });
+  }
+
+  const todayStr = getTodayDateStr();
+  if (duty_date < todayStr && req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Only administrators can modify emergency Sunday status for past dates.' });
   }
 
   try {

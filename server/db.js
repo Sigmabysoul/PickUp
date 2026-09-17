@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS app_users (
     username TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     passcode TEXT NOT NULL,
-    role TEXT DEFAULT 'senior' NOT NULL CHECK (role IN ('admin', 'senior')),
+    role TEXT DEFAULT 'mod' NOT NULL CHECK (role IN ('admin', 'senior', 'mod')),
     active BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
@@ -153,6 +153,11 @@ export async function initDb() {
       ALTER TABLE employees ADD COLUMN IF NOT EXISTS can_hold_key BOOLEAN DEFAULT FALSE NOT NULL;
       ALTER TABLE employees ADD COLUMN IF NOT EXISTS eligible_for_normal_pickup BOOLEAN DEFAULT FALSE NOT NULL;
       UPDATE warehouses SET active = (name = 'Main Warehouse');
+
+      ALTER TABLE app_users DROP CONSTRAINT IF EXISTS app_users_role_check;
+      ALTER TABLE app_users ADD CONSTRAINT app_users_role_check CHECK (role IN ('admin', 'senior', 'mod'));
+      ALTER TABLE app_users ALTER COLUMN role SET DEFAULT 'mod';
+      UPDATE app_users SET role = 'mod' WHERE role = 'senior';
     `);
   } catch (err) {
     console.error('Database migration warning:', err.message);

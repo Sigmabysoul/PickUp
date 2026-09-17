@@ -166,6 +166,26 @@ test('Super Senior Rule: Super Seniors are completely excluded from automatic al
   assert.equal(hasSuperSenior, false, 'Super Senior must never be chosen by automatic overtime algorithm');
 });
 
+test('Super Senior Eligible Rule: Super Senior with eligible_for_normal_pickup = true IS eligible and selected by algorithm', () => {
+  const employees = [
+    { id: 10, name: 'Active Super Senior', experience: 'Super Senior', skill: 5, warehouse_id: 1, eligible_for_normal_pickup: true },
+    { id: 11, name: 'Normal Junior', experience: 'Junior', skill: 1, warehouse_id: 1 },
+    { id: 12, name: 'Normal Mid', experience: 'Mid', skill: 3, warehouse_id: 1 },
+  ];
+
+  const result = selectOvertimeCrew({
+    dutyDate: '2026-09-20',
+    warehouseId: 1,
+    employees,
+    pastAssignments: [],
+    requiredCount: 2,
+  });
+
+  assert.equal(result.selected.length, 2);
+  const hasSuperSenior = result.selected.some((e) => e.id === 10);
+  assert.equal(hasSuperSenior, true, 'Super Senior with eligible_for_normal_pickup must be included in rotation');
+});
+
 test('Anti-Consecutive Rest Rule: Worker who worked yesterday is rested if other candidates are available', () => {
   const employees = [
     { id: 1, name: 'Worker A (Worked Yesterday)', experience: 'Mid', skill: 3, warehouse_id: 1 },
