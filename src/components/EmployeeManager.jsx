@@ -24,7 +24,7 @@ export default function EmployeeManager({
   onDeleteAbsence,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [warehouseFilter, setWarehouseFilter] = useState('all');
+  const [experienceFilter, setExperienceFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
   // Modals state
@@ -51,7 +51,7 @@ export default function EmployeeManager({
     if (searchTerm && !emp.name.toLowerCase().includes(searchTerm.toLowerCase())) {
       return false;
     }
-    if (warehouseFilter !== 'all' && String(emp.warehouse_id) !== String(warehouseFilter)) {
+    if (experienceFilter !== 'all' && emp.experience !== experienceFilter) {
       return false;
     }
     if (statusFilter === 'active' && !emp.active) return false;
@@ -163,15 +163,14 @@ export default function EmployeeManager({
             <select
               className="form-select"
               style={{ width: '100%' }}
-              value={warehouseFilter}
-              onChange={(e) => setWarehouseFilter(e.target.value)}
+              value={experienceFilter}
+              onChange={(e) => setExperienceFilter(e.target.value)}
             >
-              <option value="all">All Warehouses</option>
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
+              <option value="all">All Roles & Levels</option>
+              <option value="Super Senior">👑 Super Seniors (On-Call)</option>
+              <option value="Senior">Senior (Skill 4-5)</option>
+              <option value="Mid">Mid (Skill 3)</option>
+              <option value="Junior">Junior (Skill 1-2)</option>
             </select>
           </div>
 
@@ -195,8 +194,7 @@ export default function EmployeeManager({
             <thead>
               <tr>
                 <th>Employee Name</th>
-                <th>Warehouse</th>
-                <th>Experience Level</th>
+                <th>Role / Seniority</th>
                 <th>Skill Rating</th>
                 <th>Fairness Stays</th>
                 <th>Status / Availability</th>
@@ -206,7 +204,7 @@ export default function EmployeeManager({
             <tbody>
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                     No employees matching filter criteria.
                   </td>
                 </tr>
@@ -232,7 +230,6 @@ export default function EmployeeManager({
                           </span>
                         )}
                       </td>
-                      <td>{emp.warehouse_name || 'Main Warehouse'}</td>
                       <td>
                         <span
                           className={`badge ${
@@ -359,8 +356,6 @@ export default function EmployeeManager({
                     <div>
                       <div className="mobile-emp-name">{emp.name}</div>
                       <div className="mobile-emp-sub">
-                        <span>{emp.warehouse_name || 'Main Warehouse'}</span>
-                        <span>•</span>
                         <span>
                           Skill {emp.skill}/5 {emp.experience === 'Super Senior' ? '(Super Senior)' : emp.skill >= 4 ? '(Lead)' : emp.skill <= 2 ? '(Junior)' : '(Mid)'}
                         </span>
@@ -545,21 +540,6 @@ export default function EmployeeManager({
               </div>
 
               <div className="form-group">
-                <label className="form-label">Warehouse</label>
-                <select
-                  className="form-select"
-                  value={empForm.warehouse_id}
-                  onChange={(e) => setEmpForm({ ...empForm, warehouse_id: e.target.value })}
-                >
-                  {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
                 <label className="form-label">Experience Level</label>
                 <select
                   className="form-select"
@@ -657,7 +637,7 @@ export default function EmployeeManager({
                   <option value="">-- Select Employee --</option>
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.warehouse_name})
+                      {emp.name} — {emp.experience}
                     </option>
                   ))}
                 </select>

@@ -339,12 +339,6 @@ export default function CalendarView({
     activeTodayWorkers.length >= 2 &&
     activeTodayWorkers.every((a) => a.status === 'completed');
 
-  // Check if both workers are from the same warehouse
-  const bothSameHome =
-    activeTodayWorkers.length >= 2 &&
-    activeTodayWorkers[0].home_warehouse_name &&
-    activeTodayWorkers[0].home_warehouse_name === activeTodayWorkers[1].home_warehouse_name;
-
   return (
     <div className="calendar-view-container">
       {/* Mobile Top Segmented Mode Switcher (Visible on <= 768px only) */}
@@ -712,7 +706,7 @@ export default function CalendarView({
                 <div>
                   <strong>Emergency Sunday Pickup Activated:</strong>
                   <p style={{ fontSize: '0.82rem', margin: 0 }}>
-                    Emergency pickup is active for this Sunday. Both warehouses can be staffed as needed.
+                    Emergency pickup is active for this Sunday. Staff can be scheduled for overtime pickup as needed.
                   </p>
                 </div>
               </div>
@@ -732,9 +726,9 @@ export default function CalendarView({
             <div className="alert-box alert-info">
               <Coffee size={18} color="var(--accent-purple)" />
               <div>
-                <strong>Warehouse Holiday (Facility Closed):</strong>
+                <strong>Facility Holiday (Closed):</strong>
                 <p style={{ fontSize: '0.82rem', marginTop: '0.2rem' }}>
-                  The entire warehouse was closed for holiday on this date. No pickups were scheduled or required.
+                  The facility was closed for holiday on this date. No pickups were scheduled or required.
                 </p>
               </div>
             </div>
@@ -779,7 +773,7 @@ export default function CalendarView({
                   <h4 style={{ fontWeight: 800, fontSize: '1.05rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
                     <span className="legend-dot dot-overtime" style={{ animation: 'liveBeacon 1.8s infinite', boxShadow: '0 0 10px #22c55e', width: '10px', height: '10px' }} />
                     <Sparkles size={18} color="var(--accent-blue)" />
-                    Today's Overtime Crew (Main Warehouse — 2 Workers Standard)
+                    Today's Overtime Crew (2 Workers Standard)
                   </h4>
                   <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.2rem', marginBottom: 0 }}>
                     Deterministic round-robin rotation ensures fair rest and evenly balanced overtime shifts.
@@ -899,9 +893,6 @@ export default function CalendarView({
                               <CheckCircle2 size={12} /> Stayed Overtime
                             </span>
                           </div>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                            Duty at: <strong>{a.warehouse_name || 'Main Warehouse'}</strong>
-                          </div>
                         </div>
 
                         <button
@@ -967,10 +958,10 @@ export default function CalendarView({
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Building2 size={18} color="var(--accent-blue)" />
-                      <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>Main Warehouse</span>
+                      <Users size={18} color="var(--accent-blue)" />
+                      <span style={{ fontWeight: 800, fontSize: '1.05rem' }}>Overtime Crew</span>
                       <span className="badge badge-mid" style={{ fontSize: '0.72rem' }}>
-                        Single Facility
+                        2 Workers Required
                       </span>
                     </div>
 
@@ -1059,13 +1050,9 @@ export default function CalendarView({
                                   <span className="badge" style={{ background: 'var(--bg-surface-elevated)' }}>
                                     Skill: {a.skill}/5
                                   </span>
-                                  {isSuperSenior ? (
+                                  {isSuperSenior && (
                                     <span className="badge badge-mid" style={{ fontSize: '0.72rem' }}>
                                       Big Shipment Crew
-                                    </span>
-                                  ) : (
-                                    <span className="badge" style={{ background: 'var(--bg-surface-elevated)', fontSize: '0.72rem' }}>
-                                      Main Facility
                                     </span>
                                   )}
                                 </div>
@@ -1355,22 +1342,6 @@ export default function CalendarView({
                   onChange={(e) => setBackfillDate(e.target.value)}
                   required
                 />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Warehouse Where Duty Was Done:</label>
-                <select
-                  className="form-select"
-                  value={backfillWhId}
-                  onChange={(e) => setBackfillWhId(e.target.value)}
-                  required
-                >
-                  {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <div className="form-group">

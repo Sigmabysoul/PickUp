@@ -409,7 +409,7 @@ export default function AuthLockScreen({ onAuthenticated }) {
               'Verifying Credentials...'
             ) : (
               <>
-                Unlock Dispatcher <ArrowRight size={16} />
+                Log In <ArrowRight size={16} />
               </>
             )}
           </button>
@@ -426,7 +426,7 @@ export default function AuthLockScreen({ onAuthenticated }) {
             color: 'var(--text-muted, #64748b)',
           }}
         >
-          {selectedSupervisor === 'admin'
+          {selectedSupervisor === 'Admin'
             ? 'Administrator has full control to create and manage senior user passcodes'
             : 'Authorized senior staff member · Secure dispatcher session'}
         </div>

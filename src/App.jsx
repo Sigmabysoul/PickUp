@@ -421,8 +421,8 @@ export default function App() {
       {/* Navigation Bar */}
       <header className="navbar">
         <div className="navbar-top-row">
-          {/* Replaced app logo with Employ and Fairness options */}
-          <div className="nav-left-tabs">
+          {/* Desktop Unified Navigation Tabs */}
+          <nav className="nav-tabs desktop-only-nav">
             <button
               type="button"
               className={`nav-tab ${activeTab === 'employees' ? 'active' : ''}`}
@@ -443,24 +443,47 @@ export default function App() {
               <BarChart3 size={15} />
               <span>Fairness</span>
             </button>
-          </div>
 
-          <nav className="nav-tabs">
             <button
+              type="button"
               className={`nav-tab ${activeTab === 'calendar' ? 'active' : ''}`}
               onClick={() => setActiveTab('calendar')}
+              title="Calendar & Overtime Dispatch"
             >
               <Calendar size={15} />
               <span>Calendar & Dispatch</span>
             </button>
+
             <button
+              type="button"
               className={`nav-tab ${activeTab === 'warehouses' ? 'active' : ''}`}
               onClick={() => setActiveTab('warehouses')}
+              title="Settings, Reports & Passcodes"
             >
               <Building2 size={15} />
               <span>Settings</span>
             </button>
           </nav>
+
+          {/* Mobile Top Options: Employees & Fairness where logo was */}
+          <div className="mobile-only-nav-top">
+            <button
+              type="button"
+              className={`nav-tab ${activeTab === 'employees' ? 'active' : ''}`}
+              onClick={() => setActiveTab('employees')}
+            >
+              <Users size={14} />
+              <span>Staff ({activeEmployeeCount})</span>
+            </button>
+            <button
+              type="button"
+              className={`nav-tab ${activeTab === 'analytics' ? 'active' : ''}`}
+              onClick={() => setActiveTab('analytics')}
+            >
+              <BarChart3 size={14} />
+              <span>Fairness</span>
+            </button>
+          </div>
 
           <div className="nav-actions">
             {/* Theme Switcher */}
@@ -470,9 +493,9 @@ export default function App() {
               title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {theme === 'dark' ? (
-                <Sun size={17} color="var(--accent-amber)" />
+                <Sun size={16} color="var(--accent-amber)" />
               ) : (
-                <Moon size={17} color="var(--accent-blue)" />
+                <Moon size={16} color="var(--accent-blue)" />
               )}
             </button>
 

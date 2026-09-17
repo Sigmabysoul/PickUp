@@ -191,7 +191,7 @@ export default function FairnessAnalytics({
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    <span>{emp.warehouse_name || 'Warehouse'}</span>
+                    <span>{emp.skill >= 4 ? 'Lead / Senior' : emp.skill <= 2 ? 'Junior' : 'Competent Mid'}</span>
                     <span>Skill {emp.skill}/5</span>
                   </div>
                 </div>
@@ -241,7 +241,7 @@ export default function FairnessAnalytics({
                   <div>
                     <div style={{ fontWeight: 600 }}>{emp.name}</div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      {emp.warehouse_name} · {emp.experience} (Skill {emp.skill}/5)
+                      {emp.experience} · Skill {emp.skill}/5
                     </div>
                   </div>
                   <span className="badge badge-priority" style={{ animation: 'pulseGlow 2s infinite' }}>

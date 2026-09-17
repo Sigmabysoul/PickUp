@@ -283,84 +283,77 @@ button {
   width: 100%;
 }
 
-/* Left Navigation Tabs (Replacing the App Logo) */
-.nav-left-tabs {
+/* Navigation Tabs */
+.desktop-only-nav {
+  display: flex;
+}
+
+.mobile-only-nav-top {
+  display: none;
+}
+
+.nav-tabs {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  background: rgba(3, 4, 7, 0.65);
+  background: rgba(15, 23, 42, 0.75);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  padding: 0.35rem;
+  padding: 0.3rem 0.4rem;
   border-radius: var(--radius-md);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
 }
 
-[data-theme="light"] .nav-left-tabs {
-  background: rgba(241, 245, 249, 0.85);
+[data-theme="light"] .nav-tabs {
+  background: #f1f5f9;
   border: 1px solid #e2e8f0;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .nav-pill-count {
-  background: rgba(56, 189, 248, 0.18);
+  background: rgba(56, 189, 248, 0.2);
   color: var(--accent-blue);
   font-size: 0.72rem;
   font-weight: 700;
   padding: 0.1rem 0.45rem;
   border-radius: 9999px;
-  border: 1px solid rgba(56, 189, 248, 0.3);
   line-height: 1.2;
 }
 
 [data-theme="light"] .nav-pill-count {
   background: rgba(2, 132, 199, 0.12);
   color: #0284c7;
-  border: 1px solid rgba(2, 132, 199, 0.25);
-}
-
-.nav-tabs {
-  display: flex;
-  gap: 0.35rem;
-  background: rgba(3, 4, 7, 0.65);
-  backdrop-filter: blur(12px);
-  padding: 0.35rem;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
-}
-
-[data-theme="light"] .nav-tabs {
-  background: rgba(241, 245, 249, 0.85);
-  border: 1px solid #e2e8f0;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .nav-tab {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.48rem 0.95rem;
+  padding: 0.45rem 0.85rem;
   border-radius: var(--radius-sm);
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-secondary);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.18s ease;
   position: relative;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
 }
 
 .nav-tab:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-primary);
-  transform: translateY(-1px);
+}
+
+[data-theme="light"] .nav-tab:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
 }
 
 .nav-tab.active {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(99, 102, 241, 0.18));
+  background: rgba(56, 189, 248, 0.15);
   color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.45);
-  box-shadow: 0 4px 16px -2px rgba(56, 189, 248, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.4);
   font-weight: 700;
 }
 
@@ -368,7 +361,7 @@ button {
   background: #ffffff;
   color: #0284c7;
   border: 1px solid rgba(2, 132, 199, 0.35);
-  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.18);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   font-weight: 700;
 }
 
@@ -1960,20 +1953,20 @@ button {
     width: 100%;
   }
 
-  .nav-left-tabs {
-    padding: 0.2rem 0.35rem;
-    gap: 0.25rem;
+  .desktop-only-nav {
+    display: none !important;
   }
 
-  .nav-left-tabs .nav-tab {
+  .mobile-only-nav-top {
+    display: flex !important;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .mobile-only-nav-top .nav-tab {
     padding: 0.35rem 0.65rem;
     font-size: 0.78rem;
     gap: 0.35rem;
-  }
-
-  .nav-left-tabs .nav-pill-count {
-    font-size: 0.65rem;
-    padding: 0.05rem 0.35rem;
   }
 
   .nav-actions {

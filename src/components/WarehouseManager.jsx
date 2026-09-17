@@ -30,12 +30,7 @@ export default function WarehouseManager({
   dailyLogs = [],
   authUser = null,
   authFetch,
-  onAddWarehouse,
-  onUpdateWarehouse,
 }) {
-  const [name, setName] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
   // Senior User Management State (Admin Only)
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -206,18 +201,6 @@ export default function WarehouseManager({
   const [exportFormat, setExportFormat] = useState('pdf'); // 'pdf' | 'csv'
   const [isExporting, setIsExporting] = useState(false);
 
-  const handleAdd = async (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    await onAddWarehouse({ name: name.trim() });
-    setName('');
-    setIsModalOpen(false);
-  };
-
-  const handleToggle = async (wh) => {
-    await onUpdateWarehouse(wh.id, { active: !wh.active });
-  };
-
   // Monthly stats preview for selected month
   const monthPreview = filterMonthData(exportMonth, assignments, dailyLogs);
 
@@ -306,113 +289,6 @@ export default function WarehouseManager({
         </div>
       </div>
 
-      {/* =========================================================================
-          SECTION 2: FACILITY & OVERTIME DISPATCH SETTINGS (Single Main Warehouse)
-          ========================================================================= */}
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title">
-            <Building2 color="var(--accent-blue)" size={24} />
-            Warehouse Facility & Overtime Rules
-          </div>
-          <button className="btn btn-secondary btn-sm" onClick={() => setIsModalOpen(true)}>
-            <Plus size={14} /> Add Location
-          </button>
-        </div>
-
-        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', fontSize: '0.92rem' }}>
-          Overtime pickup operations run out of <strong>Main Warehouse</strong>, requiring a standard shift of <strong>2 employees</strong> each evening. Emergency / big shipment coverage is handled by on-call <strong>👑 Super Seniors</strong>.
-        </p>
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))',
-            gap: '1rem',
-          }}
-        >
-          {warehouses.map((wh) => {
-            const whEmployees = employees.filter(
-              (e) => String(e.warehouse_id) === String(wh.id)
-            );
-            const activeCount = whEmployees.filter((e) => e.active).length;
-            const superSeniorCount = whEmployees.filter((e) => e.active && e.experience === 'Super Senior').length;
-            const regularCount = activeCount - superSeniorCount;
-
-            return (
-              <div
-                key={wh.id}
-                style={{
-                  backgroundColor: 'var(--bg-surface-elevated)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '1.25rem',
-                  border: wh.active ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid var(--border-color)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.85rem',
-                  boxShadow: wh.active ? '0 4px 16px rgba(0, 0, 0, 0.2)' : 'none',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                      {wh.name}
-                    </div>
-                    {wh.active && (
-                      <div style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', fontWeight: 600, marginTop: '2px' }}>
-                        Primary Facility • 2 Staff Overtime Standard
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    className={`btn btn-sm ${wh.active ? 'btn-success' : 'btn-danger'}`}
-                    onClick={() => handleToggle(wh)}
-                    title="Toggle active status"
-                  >
-                    {wh.active ? (
-                      <>
-                        <CheckCircle size={12} /> Active
-                      </>
-                    ) : (
-                      <>
-                        <XCircle size={12} /> Disabled
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.35rem',
-                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                    padding: '0.75rem',
-                    borderRadius: '8px',
-                    fontSize: '0.84rem',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Users size={14} color="var(--accent-blue)" />
-                    <span>
-                      <strong>{regularCount}</strong> regular rotation workers ({whEmployees.length} total)
-                    </span>
-                  </div>
-                  {superSeniorCount > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#eab308' }}>
-                      <span>👑</span>
-                      <span>
-                        <strong>{superSeniorCount}</strong> Super Senior (On-call for big shipments)
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
 
       {/* =========================================================================
           SECTION 3: SENIOR USER & PASSCODE MANAGEMENT (ADMIN ACCESS)
@@ -607,48 +483,7 @@ export default function WarehouseManager({
         </div>
       )}
 
-      {/* =========================================================================
-          MODAL: ADD WAREHOUSE
-          ========================================================================= */}
-      {isModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">Add Warehouse Location</h3>
-              <button className="btn btn-secondary btn-sm" onClick={() => setIsModalOpen(false)}>
-                ✕
-              </button>
-            </div>
 
-            <form onSubmit={handleAdd}>
-              <div className="form-group">
-                <label className="form-label">Warehouse Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. South Logistics Depot"
-                  className="form-input"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
-
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Save Warehouse
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* =========================================================================
           MODAL: MONTHLY DATA EXPORT (BOSS REQUEST: MONTH SELECTOR + PDF/CSV OPTIONS)
