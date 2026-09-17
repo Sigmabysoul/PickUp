@@ -5,13 +5,17 @@
  * 1. Avoid assigning two high-rank/smart employees together. Prefer pairing one skilled with one junior when possible.
  * 2. Do not assign the same person again if they have already done a pickup, unless all other present employees have had their turn.
  * 3. If an employee is absent during their scheduled pickup, they get priority for the next day they are present.
+ * 4. Super Seniors are on-call for emergency big shipments and are never scheduled automatically.
+ * 5. Anti-consecutive rest rule: A person who worked yesterday must rest today (cannot be assigned daily back-to-back).
+ * 6. New hire / vacation baseline: New employees inherit the current team baseline to prevent unfair daily assignments.
  */
 
 export function classifyEmployee(emp) {
-  const isHighSkill = Number(emp.skill) >= 4 || emp.experience === 'Senior';
-  const isJunior = Number(emp.skill) <= 2 || emp.experience === 'Junior';
-  const isMid = !isHighSkill && !isJunior;
-  return { isHighSkill, isJunior, isMid };
+  const isSuperSenior = emp.experience === 'Super Senior';
+  const isHighSkill = !isSuperSenior && (Number(emp.skill) >= 4 || emp.experience === 'Senior');
+  const isJunior = !isSuperSenior && (Number(emp.skill) <= 2 || emp.experience === 'Junior');
+  const isMid = !isSuperSenior && !isHighSkill && !isJunior;
+  return { isSuperSenior, isHighSkill, isJunior, isMid };
 }
 
 export function computeEmployeeMetrics(emp, pastAssignments = [], targetDutyDate = null) {
@@ -42,30 +46,53 @@ export function computeEmployeeMetrics(emp, pastAssignments = [], targetDutyDate
     }
   }
 
+  // Base count for new employees joining an active rotation
+  const initialCompletedCount = Number(emp.initial_completed_count) || 0;
+  const effectiveCompletedCount = initialCompletedCount + completedCount;
+
   // Missed duty priority is active if the employee was absent and hasn't completed any duty since
   const hasMissedPriority =
     Boolean(lastAbsentDate) &&
     (!lastCompletedDate || lastCompletedDate < lastAbsentDate);
 
-  const { isHighSkill, isJunior, isMid } = classifyEmployee(emp);
+  // Check if this worker stayed yesterday (anti-consecutive rule)
+  let workedYesterday = false;
+  let daysSinceLastCompleted = null;
+  if (targetDutyDate && lastCompletedDate) {
+    const targetTime = new Date(targetDutyDate).getTime();
+    const lastTime = new Date(lastCompletedDate).getTime();
+    daysSinceLastCompleted = Math.max(0, Math.round((targetTime - lastTime) / (1000 * 60 * 60 * 24)));
+    if (daysSinceLastCompleted === 1) {
+      workedYesterday = true;
+    }
+  }
 
-  let selectionReason = `Fair turn cohort (${completedCount} prior stays)`;
-  if (hasMissedPriority) {
+  const { isSuperSenior, isHighSkill, isJunior, isMid } = classifyEmployee(emp);
+
+  let selectionReason = `Fair turn cohort (${effectiveCompletedCount} total stays)`;
+  if (isSuperSenior) {
+    selectionReason = 'Super Senior (Emergency / Big Shipment only)';
+  } else if (hasMissedPriority) {
     selectionReason = `Missed-duty priority (absent on ${lastAbsentDate}, catch-up queued)`;
+  } else if (workedYesterday) {
+    selectionReason = `Worked yesterday (${lastCompletedDate}) · Rest day priority`;
   } else if (!lastCompletedDate) {
-    selectionReason = `Never stayed overtime (first turn in rotation)`;
-  } else if (targetDutyDate) {
-    const diffMs = new Date(targetDutyDate).getTime() - new Date(lastCompletedDate).getTime();
-    const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-    selectionReason = `${completedCount} stays · Waited ${days} days since last stay (${lastCompletedDate})`;
+    selectionReason = `First turn in rotation (${effectiveCompletedCount} base)`;
+  } else if (daysSinceLastCompleted !== null) {
+    selectionReason = `${effectiveCompletedCount} stays · Waited ${daysSinceLastCompleted} days since last stay (${lastCompletedDate})`;
   }
 
   return {
     ...emp,
     completedCount,
+    initialCompletedCount,
+    effectiveCompletedCount,
     lastCompletedDate,
     lastAbsentDate,
     hasMissedPriority,
+    workedYesterday,
+    daysSinceLastCompleted,
+    isSuperSenior,
     isHighSkill,
     isJunior,
     isMid,
@@ -92,7 +119,7 @@ function getCombinations(arr, k) {
 
 /**
  * Scores a potential assignment set for Rule 1 (Pairing), Rule 3 (Missed Priority),
- * and recency tie-breaking.
+ * anti-consecutive rest, and recency tie-breaking.
  */
 function scoreCandidateSet(selectedSet, candidateSlice, targetDate) {
   let score = 0;
@@ -101,9 +128,14 @@ function scoreCandidateSet(selectedSet, candidateSlice, targetDate) {
   const juniorCount = selectedSet.filter((e) => e.isJunior).length;
   const midCount = selectedSet.filter((e) => e.isMid).length;
 
-  // Rule 3: Prioritize employees who missed past scheduled pickup
   for (const e of selectedSet) {
-    if (e.hasMissedPriority) {
+    // Heavy penalty for consecutive days (worked yesterday)
+    if (e.workedYesterday) {
+      score -= 50000;
+    }
+
+    // Rule 3: Prioritize employees who missed past scheduled pickup (if not resting)
+    if (e.hasMissedPriority && !e.workedYesterday) {
       score += 10000;
     }
   }
@@ -128,13 +160,14 @@ function scoreCandidateSet(selectedSet, candidateSlice, targetDate) {
   // Fairness recency: prefer workers who haven't served in the longest time
   for (const e of selectedSet) {
     if (!e.lastCompletedDate) {
-      score += 50; // Never served, give slight preference
+      score += 20; // First turn in rotation
     } else {
-      // Days since last completed duty
-      const diffMs =
-        new Date(targetDate).getTime() - new Date(e.lastCompletedDate).getTime();
-      const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-      score += Math.min(days, 30);
+      const days = e.daysSinceLastCompleted || 0;
+      if (days <= 2) {
+        score -= 200; // Prefer giving at least 2 rest days between overtime shifts
+      } else {
+        score += Math.min(days, 30);
+      }
     }
     // Deterministic tie-breaker using employee id
     score -= Number(e.id) * 0.0001;
@@ -144,14 +177,14 @@ function scoreCandidateSet(selectedSet, candidateSlice, targetDate) {
 }
 
 /**
- * Selects overtime pickup crew for a specific warehouse and date.
+ * Selects overtime pickup crew for a warehouse and date.
  *
  * @param {Object} options
  * @param {string} options.dutyDate - Target date 'YYYY-MM-DD'
  * @param {number|string} options.warehouseId - Warehouse ID
- * @param {Array} options.employees - Candidate employees present & active at this warehouse
+ * @param {Array} options.employees - Candidate employees present & active
  * @param {Array} options.pastAssignments - History of assignments
- * @param {number} options.requiredCount - Number of workers needed (default: 1)
+ * @param {number} options.requiredCount - Number of workers needed (default: 2)
  * @returns {{ selected: Array, warnings: Array<string> }}
  */
 export function selectOvertimeCrew({
@@ -159,20 +192,21 @@ export function selectOvertimeCrew({
   warehouseId,
   employees = [],
   pastAssignments = [],
-  requiredCount = 1,
+  requiredCount = 2,
 }) {
   const warnings = [];
 
-  // 1. Filter eligible candidates: active, not archived, matching warehouse
+  // 1. Filter eligible candidates: active, not archived, matching warehouse, and NOT Super Senior (on-call only)
   const eligible = employees.filter(
     (e) =>
       !e.archived &&
       e.active !== false &&
+      e.experience !== 'Super Senior' &&
       (!warehouseId || e.warehouse_id == null || String(e.warehouse_id) === String(warehouseId))
   );
 
   if (eligible.length === 0) {
-    warnings.push(`No active employees available for warehouse on ${dutyDate}.`);
+    warnings.push(`No active eligible employees available for duty on ${dutyDate}.`);
     return { selected: [], warnings };
   }
 
@@ -197,10 +231,21 @@ export function selectOvertimeCrew({
     return { selected: enriched, warnings };
   }
 
-  // 3. Group candidates by completedCount to strictly enforce Rule 2 (Fairness Cohorts)
+  // 3. Anti-consecutive rest filter:
+  // If there are enough candidates who didn't work yesterday, exclude yesterday's workers from today's selection!
+  const nonRestingCandidates = enriched.filter((e) => !e.workedYesterday);
+  let poolToUse = enriched;
+
+  if (nonRestingCandidates.length >= requiredCount) {
+    poolToUse = nonRestingCandidates;
+  } else {
+    warnings.push('Some employees may work consecutive shifts due to limited rested staff available today.');
+  }
+
+  // 4. Group candidates by effectiveCompletedCount to enforce Rule 2 (Fairness Cohorts)
   const cohortsMap = new Map();
-  for (const emp of enriched) {
-    const count = emp.completedCount;
+  for (const emp of poolToUse) {
+    const count = emp.effectiveCompletedCount;
     if (!cohortsMap.has(count)) {
       cohortsMap.set(count, []);
     }

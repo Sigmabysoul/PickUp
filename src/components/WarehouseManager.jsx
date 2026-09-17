@@ -307,27 +307,27 @@ export default function WarehouseManager({
       </div>
 
       {/* =========================================================================
-          SECTION 2: WAREHOUSES MANAGEMENT (Old Warehouse & New Warehouse)
+          SECTION 2: FACILITY & OVERTIME DISPATCH SETTINGS (Single Main Warehouse)
           ========================================================================= */}
       <div className="card">
         <div className="card-header">
           <div className="card-title">
             <Building2 color="var(--accent-blue)" size={24} />
-            Warehouse Management
+            Warehouse Facility & Overtime Rules
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setIsModalOpen(true)}>
-            <Plus size={14} /> Add Warehouse
+          <button className="btn btn-secondary btn-sm" onClick={() => setIsModalOpen(true)}>
+            <Plus size={14} /> Add Location
           </button>
         </div>
 
-        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
-          Configure warehouse locations where delivery trucks arrive after hours. Overtime pickup duty is dispatched across all active locations.
+        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', fontSize: '0.92rem' }}>
+          Overtime pickup operations run out of <strong>Main Warehouse</strong>, requiring a standard shift of <strong>2 employees</strong> each evening. Emergency / big shipment coverage is handled by on-call <strong>👑 Super Seniors</strong>.
         </p>
 
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))',
             gap: '1rem',
           }}
         >
@@ -336,6 +336,8 @@ export default function WarehouseManager({
               (e) => String(e.warehouse_id) === String(wh.id)
             );
             const activeCount = whEmployees.filter((e) => e.active).length;
+            const superSeniorCount = whEmployees.filter((e) => e.active && e.experience === 'Super Senior').length;
+            const regularCount = activeCount - superSeniorCount;
 
             return (
               <div
@@ -344,14 +346,24 @@ export default function WarehouseManager({
                   backgroundColor: 'var(--bg-surface-elevated)',
                   borderRadius: 'var(--radius-md)',
                   padding: '1.25rem',
-                  border: '1px solid var(--border-color)',
+                  border: wh.active ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid var(--border-color)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '0.75rem',
+                  gap: '0.85rem',
+                  boxShadow: wh.active ? '0 4px 16px rgba(0, 0, 0, 0.2)' : 'none',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{wh.name}</span>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                      {wh.name}
+                    </div>
+                    {wh.active && (
+                      <div style={{ fontSize: '0.78rem', color: 'var(--accent-blue)', fontWeight: 600, marginTop: '2px' }}>
+                        Primary Facility • 2 Staff Overtime Standard
+                      </div>
+                    )}
+                  </div>
                   <button
                     className={`btn btn-sm ${wh.active ? 'btn-success' : 'btn-danger'}`}
                     onClick={() => handleToggle(wh)}
@@ -372,16 +384,29 @@ export default function WarehouseManager({
                 <div
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
+                    flexDirection: 'column',
+                    gap: '0.35rem',
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    padding: '0.75rem',
+                    borderRadius: '8px',
+                    fontSize: '0.84rem',
                     color: 'var(--text-secondary)',
-                    fontSize: '0.85rem',
                   }}
                 >
-                  <Users size={14} />
-                  <span>
-                    <strong>{activeCount}</strong> active workers ({whEmployees.length} total rostered)
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Users size={14} color="var(--accent-blue)" />
+                    <span>
+                      <strong>{regularCount}</strong> regular rotation workers ({whEmployees.length} total)
+                    </span>
+                  </div>
+                  {superSeniorCount > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#eab308' }}>
+                      <span>👑</span>
+                      <span>
+                        <strong>{superSeniorCount}</strong> Super Senior (On-call for big shipments)
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             );

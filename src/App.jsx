@@ -231,6 +231,18 @@ export default function App() {
     return json;
   };
 
+  const handleAssignSuperSenior = async ({ duty_date, super_senior_id, crew_mode }) => {
+    const res = await authFetch('/api/assignments/super-senior', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duty_date, super_senior_id, crew_mode }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to update Super Senior assignment');
+    await fetchBootstrapData();
+    return json;
+  };
+
   const handleSwapWarehouses = async (duty_date) => {
     const res = await authFetch('/api/assignments/swap', {
       method: 'POST',
@@ -419,37 +431,12 @@ export default function App() {
                 <span className="brand-badge">Dispatcher</span>
               </div>
               <div className="brand-subtitle">
-                {activeEmployeeCount} Active Staff · {data.warehouses.length} Warehouses
+                {activeEmployeeCount} Active Staff · Main Warehouse (2 Overtime Workers)
               </div>
             </div>
           </div>
 
           <div className="nav-actions">
-            {/* Senior Supervisor Profile Badge */}
-            {/* Senior / Admin Profile Badge */}
-            <div className="senior-badge">
-              <ShieldCheck size={14} color="var(--accent-blue)" />
-              <ShieldCheck size={14} color={authUser?.role === 'admin' ? 'var(--accent-amber, #eab308)' : 'var(--accent-blue)'} />
-              <span>{authUser?.name || 'Senior'}</span>
-              {authUser?.role === 'admin' && (
-                <span
-                  style={{
-                    backgroundColor: 'rgba(234, 179, 8, 0.15)',
-                    color: 'var(--accent-amber, #eab308)',
-                    fontSize: '0.68rem',
-                    fontWeight: 800,
-                    padding: '1px 5px',
-                    borderRadius: '4px',
-                    marginLeft: '4px',
-                    letterSpacing: '0.03em',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Admin
-                </span>
-              )}
-            </div>
-
             {/* Theme Switcher */}
             <button
               className="theme-toggle-btn"
@@ -493,20 +480,6 @@ export default function App() {
             <span>Calendar & Dispatch</span>
           </button>
           <button
-            className={`nav-tab ${activeTab === 'employees' ? 'active' : ''}`}
-            onClick={() => setActiveTab('employees')}
-          >
-            <Users size={15} />
-            <span>Employees</span>
-          </button>
-          <button
-            className={`nav-tab ${activeTab === 'analytics' ? 'active' : ''}`}
-            onClick={() => setActiveTab('analytics')}
-          >
-            <BarChart3 size={15} />
-            <span>Fairness</span>
-          </button>
-          <button
             className={`nav-tab ${activeTab === 'warehouses' ? 'active' : ''}`}
             onClick={() => setActiveTab('warehouses')}
           >
@@ -516,28 +489,81 @@ export default function App() {
         </nav>
       </header>
 
-      {/* Main Content Area */}
-      <main className="main-content">
-        {error && (
-          <div className="alert-box alert-warning">
-            <span>Unable to connect to backend server: {error}</span>
-          </div>
-        )}
+      {/* Main Body Layout with Left Sidebar */}
+      <div className="app-layout-with-sidebar">
+        {/* Left Navigation Sidebar: All except Settings and Calendar & Dispatch */}
+        <aside className="app-left-sidebar" aria-label="Secondary Navigation">
+          <div className="sidebar-section-title">MANAGEMENT & EQUITY</div>
 
-        <div className="tab-panel">
-          {activeTab === 'calendar' && (
-            <CalendarView
-              assignments={data.assignments}
-              warehouses={data.warehouses}
-              employees={data.employees}
-              dailyRequirements={data.dailyRequirements}
-              dailyLogs={data.dailyLogs || []}
-              onUpdateStatus={handleUpdateAssignmentStatus}
-              onUpdateDailyStatus={handleUpdateDailyStatus}
-              onReportAbsence={handleReportAbsence}
-              onConfirmToday={handleConfirmToday}
-              onSwapWarehouses={handleSwapWarehouses}
-              onLogHistoricalPickup={handleLogHistoricalPickup}
+          <button
+            type="button"
+            className={`sidebar-nav-btn ${activeTab === 'employees' ? 'active' : ''}`}
+            onClick={() => setActiveTab('employees')}
+          >
+            <div className="sidebar-nav-btn-left">
+              <Users size={17} />
+              <div style={{ textAlign: 'left' }}>
+                <div className="sidebar-nav-label">Employees</div>
+                <div className="sidebar-nav-sub">Staff roster & leaves</div>
+              </div>
+            </div>
+            <span className="sidebar-pill-badge">{activeEmployeeCount}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`sidebar-nav-btn ${activeTab === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analytics')}
+          >
+            <div className="sidebar-nav-btn-left">
+              <BarChart3 size={17} />
+              <div style={{ textAlign: 'left' }}>
+                <div className="sidebar-nav-label">Fairness</div>
+                <div className="sidebar-nav-sub">Equity & shift turns</div>
+              </div>
+            </div>
+          </button>
+
+          {/* Quick Super Senior Status Pill */}
+          <div className="sidebar-info-card">
+            <div className="sidebar-info-header">
+              <span style={{ fontSize: '1.05rem' }}>👑</span>
+              <strong>Super Senior</strong>
+            </div>
+            <p className="sidebar-info-text">
+              Emergency on-call crew for big shipments. Never scheduled daily.
+            </p>
+            <div className="sidebar-info-stats">
+              <span>{data.employees.filter((e) => e.experience === 'Super Senior').length} On-Call</span>
+              <span className="sidebar-info-dot">·</span>
+              <span>1 Facility (2 OT)</span>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="main-content">
+          {error && (
+            <div className="alert-box alert-warning">
+              <span>Unable to connect to backend server: {error}</span>
+            </div>
+          )}
+
+          <div className="tab-panel">
+            {activeTab === 'calendar' && (
+              <CalendarView
+                assignments={data.assignments}
+                warehouses={data.warehouses}
+                employees={data.employees}
+                dailyRequirements={data.dailyRequirements}
+                dailyLogs={data.dailyLogs || []}
+                onUpdateStatus={handleUpdateAssignmentStatus}
+                onUpdateDailyStatus={handleUpdateDailyStatus}
+                onReportAbsence={handleReportAbsence}
+                onConfirmToday={handleConfirmToday}
+                onAssignSuperSenior={handleAssignSuperSenior}
+                onSwapWarehouses={handleSwapWarehouses}
+                onLogHistoricalPickup={handleLogHistoricalPickup}
               onDeleteHistoricalPickup={handleDeleteHistoricalPickup}
               onToggleEmergencySunday={handleToggleEmergencySunday}
               onGeneratePlan={handleGeneratePlan}
@@ -592,6 +618,7 @@ export default function App() {
           )}
         </div>
       </main>
+    </div>
 
       {/* Mobile Bottom Navigation Bar (Thumb-Friendly, Fixed Bottom) */}
       <nav className="mobile-bottom-bar" aria-label="Mobile Navigation">

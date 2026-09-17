@@ -232,31 +232,35 @@ export default function EmployeeManager({
                           </span>
                         )}
                       </td>
-                      <td>{emp.warehouse_name || 'Unassigned'}</td>
+                      <td>{emp.warehouse_name || 'Main Warehouse'}</td>
                       <td>
                         <span
                           className={`badge ${
-                            emp.experience === 'Senior'
+                            emp.experience === 'Super Senior'
+                              ? 'badge-super-senior'
+                              : emp.experience === 'Senior'
                               ? 'badge-senior'
                               : emp.experience === 'Mid'
                               ? 'badge-mid'
                               : 'badge-junior'
                           }`}
                         >
-                          {emp.experience}
+                          {emp.experience === 'Super Senior' ? '👑 Super Senior' : emp.experience}
                         </span>
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                           <span style={{ fontWeight: 600 }}>{emp.skill}/5</span>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            {emp.skill >= 4 ? '(Lead/Smart)' : emp.skill <= 2 ? '(Junior)' : '(Competent)'}
+                            {emp.experience === 'Super Senior' ? '(On-Call Leader)' : emp.skill >= 4 ? '(Lead/Smart)' : emp.skill <= 2 ? '(Junior)' : '(Competent)'}
                           </span>
                         </div>
                       </td>
                       <td>
                         <span className="badge" style={{ backgroundColor: 'var(--bg-surface-elevated)' }}>
-                          {emp.completedCount || 0} completed
+                          {emp.experience === 'Super Senior'
+                            ? 'On-Call (Emergency Only)'
+                            : `${emp.completedCount || 0} completed (${emp.effectiveCompletedCount || emp.completedCount || 0} total)`}
                         </span>
                       </td>
                       <td>
@@ -340,7 +344,9 @@ export default function EmployeeManager({
               );
               const isOnLeave = empAbsences.length > 0;
               const badgeClass =
-                emp.experience === 'Senior'
+                emp.experience === 'Super Senior'
+                  ? 'badge-super-senior'
+                  : emp.experience === 'Senior'
                   ? 'badge-senior'
                   : emp.experience === 'Mid'
                   ? 'badge-mid'
@@ -353,20 +359,24 @@ export default function EmployeeManager({
                     <div>
                       <div className="mobile-emp-name">{emp.name}</div>
                       <div className="mobile-emp-sub">
-                        <span>{emp.warehouse_name || 'Unassigned'}</span>
+                        <span>{emp.warehouse_name || 'Main Warehouse'}</span>
                         <span>•</span>
-                        <span>Skill {emp.skill}/5 {emp.skill >= 4 ? '(Lead)' : emp.skill <= 2 ? '(Junior)' : '(Mid)'}</span>
+                        <span>
+                          Skill {emp.skill}/5 {emp.experience === 'Super Senior' ? '(Super Senior)' : emp.skill >= 4 ? '(Lead)' : emp.skill <= 2 ? '(Junior)' : '(Mid)'}
+                        </span>
                       </div>
                     </div>
                     <span className={`badge ${badgeClass}`}>
-                      {emp.experience}
+                      {emp.experience === 'Super Senior' ? '👑 Super Senior' : emp.experience}
                     </span>
                   </div>
 
                   {/* Badges & Stats */}
                   <div className="mobile-emp-stats-row">
                     <span className="mobile-emp-stat-pill">
-                      🔥 {emp.completedCount || 0} completed stays
+                      {emp.experience === 'Super Senior'
+                        ? '👑 On-Call Emergency Crew'
+                        : `🔥 ${emp.completedCount || 0} completed stays`}
                     </span>
                     {isOnLeave && (
                       <span className="mobile-emp-leave-pill" title={`${empAbsences[0].reason} (${empAbsences[0].starts_on} to ${empAbsences[0].ends_on})`}>
@@ -559,7 +569,22 @@ export default function EmployeeManager({
                   <option value="Junior">Junior</option>
                   <option value="Mid">Mid</option>
                   <option value="Senior">Senior</option>
+                  <option value="Super Senior">👑 Super Senior (On-Call for Big Shipments)</option>
                 </select>
+                {empForm.experience === 'Super Senior' && (
+                  <div style={{
+                    marginTop: '0.5rem',
+                    padding: '0.65rem 0.85rem',
+                    borderRadius: '8px',
+                    background: 'rgba(234, 179, 8, 0.12)',
+                    border: '1px solid rgba(234, 179, 8, 0.3)',
+                    color: '#eab308',
+                    fontSize: '0.8rem',
+                    lineHeight: '1.4'
+                  }}>
+                    👑 <strong>Super Senior Mode:</strong> Excluded from regular automatic overtime rotation. Only stays on-call during emergency/big shipments (alone, with 1, or with 2 workers).
+                  </div>
+                )}
               </div>
 
               <div className="form-group">

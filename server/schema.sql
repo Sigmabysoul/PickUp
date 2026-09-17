@@ -10,8 +10,9 @@ CREATE TABLE IF NOT EXISTS employees (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     warehouse_id BIGINT NOT NULL REFERENCES warehouses(id),
     name TEXT NOT NULL,
-    experience TEXT NOT NULL CHECK (experience IN ('Junior', 'Mid', 'Senior')),
+    experience TEXT NOT NULL CHECK (experience IN ('Junior', 'Mid', 'Senior', 'Super Senior')),
     skill SMALLINT NOT NULL CHECK (skill >= 1 AND skill <= 5),
+    initial_completed_count INTEGER DEFAULT 0 NOT NULL,
     active BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     archived BOOLEAN DEFAULT FALSE NOT NULL

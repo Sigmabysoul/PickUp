@@ -30,6 +30,7 @@ export default function CalendarView({
   onUpdateDailyStatus,
   onReportAbsence,
   onConfirmToday,
+  onAssignSuperSenior,
   onSwapWarehouses,
   onLogHistoricalPickup,
   onDeleteHistoricalPickup,
@@ -39,8 +40,13 @@ export default function CalendarView({
   const todayStr = '2026-09-16'; // Anchor date
   const [currentDate, setCurrentDate] = useState(() => new Date(2026, 8, 16)); // September 2026
   const [selectedDateStr, setSelectedDateStr] = useState('2026-09-16');
-  const [filterWarehouseId, setFilterWarehouseId] = useState('all');
   const [viewMode, setViewMode] = useState('calendar'); // 'calendar' | 'list'
+
+  // Super Senior Modal State (Emergency Big Shipments)
+  const [isSuperSeniorModalOpen, setIsSuperSeniorModalOpen] = useState(false);
+  const [superSeniorId, setSuperSeniorId] = useState('');
+  const [superSeniorCrewMode, setSuperSeniorCrewMode] = useState('with_2');
+  const [isSubmittingSuperSenior, setIsSubmittingSuperSenior] = useState(false);
 
   // Absence modal state
   const [reportingAssignment, setReportingAssignment] = useState(null);
@@ -57,7 +63,6 @@ export default function CalendarView({
 
   // Loading & Feedback states
   const [isConfirmingToday, setIsConfirmingToday] = useState(false);
-  const [isSwapping, setIsSwapping] = useState(false);
   const [mobileTab, setMobileTab] = useState('today'); // 'today' | 'calendar'
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -119,22 +124,14 @@ export default function CalendarView({
   // Determine status for each date
   const getDateStatus = (dateStr) => {
     // 1. Check daily_logs
-    const log = dailyLogs.find((l) => {
-      if (l.duty_date !== dateStr) return false;
-      if (filterWarehouseId === 'all') return true;
-      return l.warehouse_id == null || String(l.warehouse_id) === String(filterWarehouseId);
-    });
+    const log = dailyLogs.find((l) => l.duty_date === dateStr);
 
     if (log) {
       return { type: log.status, notes: log.notes };
     }
 
     // 2. Check assignments
-    const dayAssignments = assignments.filter((a) => {
-      if (a.duty_date !== dateStr) return false;
-      if (filterWarehouseId === 'all') return true;
-      return String(a.warehouse_id) === String(filterWarehouseId);
-    });
+    const dayAssignments = assignments.filter((a) => a.duty_date === dateStr);
 
     const hasCompleted = dayAssignments.some((a) => a.status === 'completed');
     const hasScheduled = dayAssignments.some((a) => a.status === 'scheduled');
@@ -157,17 +154,20 @@ export default function CalendarView({
     return { type: 'neutral' };
   };
 
+  // Helper: check if a Super Senior is on duty for this date
+  const hasSuperSeniorOnDate = (dateStr) => {
+    return assignments.some(
+      (a) => a.duty_date === dateStr && a.status !== 'absent' && a.experience === 'Super Senior'
+    );
+  };
+
   const selectedStatus = getDateStatus(selectedDateStr);
   const isPastDate = selectedDateStr < todayStr;
   const isToday = selectedDateStr === todayStr;
   const isSelectedSunday = new Date(selectedDateStr + 'T00:00:00').getDay() === 0;
 
-  // Selected date's assignments
-  const selectedAssignments = assignments.filter((a) => {
-    if (a.duty_date !== selectedDateStr) return false;
-    if (filterWarehouseId === 'all') return true;
-    return String(a.warehouse_id) === String(filterWarehouseId);
-  });
+  // Selected date's assignments (single warehouse)
+  const selectedAssignments = assignments.filter((a) => a.duty_date === selectedDateStr);
 
   // Emergency Sunday status
   const isEmergencySundayActive =
@@ -176,11 +176,12 @@ export default function CalendarView({
       (selectedStatus.notes && selectedStatus.notes.includes('Emergency Sunday')) ||
       selectedAssignments.length > 0);
 
-  // Filter warehouses to the 2 target warehouses
-  const displayWarehouses =
-    filterWarehouseId === 'all'
-      ? warehouses
-      : warehouses.filter((w) => String(w.id) === String(filterWarehouseId));
+  // Single active warehouse reference
+  const activeWarehouse =
+    warehouses.find((w) => w.name === 'Main Warehouse' || w.active) ||
+    warehouses[0] || { id: '1', name: 'Main Warehouse' };
+
+  const superSeniorList = employees.filter((e) => e.experience === 'Super Senior' && e.active);
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -189,15 +190,14 @@ export default function CalendarView({
 
   // Handlers
   const handleSetDayOutcome = async (newStatus) => {
-    const whId = filterWarehouseId === 'all' ? null : filterWarehouseId;
-    await onUpdateDailyStatus(whId, selectedDateStr, newStatus);
+    await onUpdateDailyStatus(activeWarehouse.id, selectedDateStr, newStatus);
     showToast(`Marked facility outcome as "${newStatus.replace('_', ' ')}"`);
   };
 
-  const handleQuickAutoSelect = async (warehouseId = null) => {
+  const handleQuickAutoSelect = async () => {
     await onGeneratePlan({
       duty_date: selectedDateStr,
-      warehouse_id: warehouseId,
+      warehouse_id: activeWarehouse.id,
       dry_run: false,
     });
     showToast('Auto-selected fair overtime crew.');
@@ -216,16 +216,46 @@ export default function CalendarView({
     }
   };
 
-  const handleSwapClick = async () => {
-    if (!onSwapWarehouses) return;
+  const handleOpenSuperSeniorModal = (dateStr = selectedDateStr) => {
+    setSelectedDateStr(dateStr);
+    const existingSs = assignments.find(
+      (a) => a.duty_date === dateStr && a.status !== 'absent' && a.experience === 'Super Senior'
+    );
+    if (existingSs) {
+      setSuperSeniorId(String(existingSs.employee_id));
+    } else if (superSeniorList.length > 0) {
+      setSuperSeniorId(String(superSeniorList[0].id));
+    } else {
+      setSuperSeniorId('');
+    }
+    setSuperSeniorCrewMode('with_2');
+    setIsSuperSeniorModalOpen(true);
+  };
+
+  const handleConfirmSuperSenior = async (e) => {
+    e.preventDefault();
+    if (!onAssignSuperSenior) return;
+    if (superSeniorCrewMode !== 'remove' && !superSeniorId) {
+      alert('Please select an active Super Senior employee.');
+      return;
+    }
     try {
-      setIsSwapping(true);
-      await onSwapWarehouses(selectedDateStr);
-      showToast('Swapped assigned warehouses between the two workers.');
+      setIsSubmittingSuperSenior(true);
+      await onAssignSuperSenior({
+        duty_date: selectedDateStr,
+        super_senior_id: superSeniorId,
+        crew_mode: superSeniorCrewMode,
+      });
+      setIsSuperSeniorModalOpen(false);
+      showToast(
+        superSeniorCrewMode === 'remove'
+          ? 'Super Senior removed for this date.'
+          : `Super Senior scheduled (${superSeniorCrewMode.replace('_', ' ')})!`
+      );
     } catch (err) {
       alert(err.message);
     } finally {
-      setIsSwapping(false);
+      setIsSubmittingSuperSenior(false);
     }
   };
 
@@ -351,18 +381,9 @@ export default function CalendarView({
           <div className="attendance-header-bar">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
               <h2 className="attendance-app-title">Calendar</h2>
-              <select
-                className="form-select attendance-wh-filter"
-                value={filterWarehouseId}
-                onChange={(e) => setFilterWarehouseId(e.target.value)}
-              >
-                <option value="all">Both Warehouses</option>
-                {warehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
+              <span className="brand-badge" style={{ fontSize: '0.74rem' }}>
+                Main Warehouse (2 OT Crew)
+              </span>
             </div>
 
             <div className="segmented-view-toggle">
@@ -425,6 +446,7 @@ export default function CalendarView({
                 {calendarCells.map((cell, idx) => {
                   const statusInfo = getDateStatus(cell.dateStr);
                   const isSelected = cell.dateStr === selectedDateStr;
+                  const hasSuperSenior = hasSuperSeniorOnDate(cell.dateStr);
 
                   let cellClass = 'day-box';
                   if (!cell.isCurrentMonth) cellClass += ' day-other-month';
@@ -454,9 +476,14 @@ export default function CalendarView({
                       type="button"
                       className={cellClass}
                       onClick={() => setSelectedDateStr(cell.dateStr)}
-                      title={`${cell.dateStr}: ${statusInfo.type.replace('_', ' ')}`}
+                      title={`${cell.dateStr}: ${statusInfo.type.replace('_', ' ')}${hasSuperSenior ? ' · 👑 Super Senior on duty' : ''}`}
                     >
                       <span className="day-number">{cell.dayNum}</span>
+                      {hasSuperSenior && (
+                        <span className="day-super-senior-crown" title="👑 Super Senior on duty (Emergency/Big Shipment)">
+                          👑
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -471,6 +498,10 @@ export default function CalendarView({
                 <div className="legend-item">
                   <span className="legend-dot dot-overtime"></span>
                   <span className="legend-text">Overtime Stay</span>
+                </div>
+                <div className="legend-item">
+                  <span style={{ fontSize: '0.85rem' }}>👑</span>
+                  <span className="legend-text">Super Senior</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-before7pm"></span>
@@ -526,7 +557,12 @@ export default function CalendarView({
                         </div>
                       </div>
 
-                      <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        {hasSuperSeniorOnDate(cell.dateStr) && (
+                          <span className="badge badge-super-senior" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            👑 Super Senior
+                          </span>
+                        )}
                         {statusInfo.type === 'overtime_stay' && (
                           <span className="badge badge-status-completed">Overtime Stay</span>
                         )}
@@ -733,6 +769,9 @@ export default function CalendarView({
           {/* =========================================================================
               TODAY'S SPECIAL DISPATCH COMMAND CARD (CONFIRMATION & SWAP ACTIONS)
               ========================================================================= */}
+          {/* =========================================================================
+              TODAY'S SPECIAL DISPATCH COMMAND CARD (CONFIRMATION & SUPER SENIOR ACTIONS)
+              ========================================================================= */}
           {isToday && (!isSelectedSunday || isEmergencySundayActive) && (
             <div className="today-action-card">
               <div className="today-action-header">
@@ -740,39 +779,49 @@ export default function CalendarView({
                   <h4 style={{ fontWeight: 800, fontSize: '1.05rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
                     <span className="legend-dot dot-overtime" style={{ animation: 'liveBeacon 1.8s infinite', boxShadow: '0 0 10px #22c55e', width: '10px', height: '10px' }} />
                     <Sparkles size={18} color="var(--accent-blue)" />
-                    Today's Overtime Crew (1 Old + 1 New)
+                    Today's Overtime Crew (Main Warehouse — 2 Workers Standard)
                   </h4>
                   <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.2rem', marginBottom: 0 }}>
-                    Employees from either warehouse can stay at any location. Both can be from the same warehouse.
+                    Deterministic round-robin rotation ensures fair rest and evenly balanced overtime shifts.
                   </p>
-                  {bothSameHome && (
+                  {hasSuperSeniorOnDate(todayStr) && (
                     <div style={{ marginTop: '0.4rem' }}>
-                      <span className="cross-cover-badge">
-                        Notice: Both workers are based at {activeTodayWorkers[0].home_warehouse_name} (cross-covering is active)
+                      <span className="badge badge-super-senior" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        👑 Emergency Super Senior Active on Today's Duty
                       </span>
                     </div>
                   )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  {/* Swap Button if 2 active workers exist */}
-                  {activeTodayWorkers.length >= 2 && (
-                    <button
-                      type="button"
-                      className="swap-btn"
-                      onClick={handleSwapClick}
-                      disabled={isSwapping}
-                      title="Swap assigned warehouse locations between the two workers"
-                    >
-                      <ArrowLeftRight size={15} />
-                      {isSwapping ? 'Swapping...' : 'Swap Locations'}
-                    </button>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                  {/* Emergency Super Senior Button */}
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handleOpenSuperSeniorModal(selectedDateStr)}
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.2))',
+                      border: '1px solid rgba(245, 158, 11, 0.5)',
+                      color: '#fbbf24',
+                      fontWeight: 800,
+                      fontSize: '0.85rem',
+                      padding: '0.55rem 0.95rem',
+                      borderRadius: 'var(--radius-sm)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      boxShadow: '0 2px 10px rgba(245, 158, 11, 0.18)',
+                    }}
+                    title="Assign an on-call Super Senior for emergency big shipments"
+                  >
+                    <span>👑</span>
+                    <span>Emergency Super Senior</span>
+                  </button>
 
                   {/* Prominent Confirm Button */}
                   {allTodayConfirmed ? (
-                    <div className="today-confirmed-badge">
-                      <CheckCircle2 size={16} /> Both Confirmed Staying Overtime
+                    <div className="today-confirmed-badge" style={{ backgroundColor: 'rgba(34, 197, 94, 0.2)', border: '1px solid var(--accent-green)', padding: '0.65rem 1.15rem', borderRadius: 'var(--radius-md)', fontWeight: 800, color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 0 15px rgba(34, 197, 94, 0.3)' }}>
+                      <CheckCircle2 size={18} /> Both Confirmed Staying Overtime Today
                     </div>
                   ) : (
                     <button
@@ -780,10 +829,24 @@ export default function CalendarView({
                       className="today-confirm-btn"
                       onClick={handleConfirmTodayClick}
                       disabled={isConfirmingToday || activeTodayWorkers.length === 0}
-                      title="Confirm that these two employees will stay overtime today"
+                      title="Confirm that these two employees will really stay overtime today"
+                      style={{
+                        background: 'linear-gradient(135deg, #16a34a 0%, #22c55e 100%)',
+                        color: '#ffffff',
+                        fontWeight: 800,
+                        fontSize: '0.96rem',
+                        padding: '0.75rem 1.35rem',
+                        borderRadius: 'var(--radius-md)',
+                        boxShadow: '0 4px 18px rgba(34, 197, 94, 0.45)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.6rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
                     >
-                      <CheckCircle2 size={18} />
-                      {isConfirmingToday ? 'Locking in...' : 'Confirm Those 2 Will Stay Today'}
+                      <CheckCircle2 size={19} />
+                      {isConfirmingToday ? 'Confirming...' : 'Confirm Those 2 Will Really Stay Today'}
                     </button>
                   )}
                 </div>
@@ -821,21 +884,23 @@ export default function CalendarView({
                             <span style={{ fontWeight: 800, fontSize: '0.98rem' }}>{a.employee_name}</span>
                             <span
                               className={`badge ${
-                                a.experience === 'Senior'
+                                a.experience === 'Super Senior'
+                                  ? 'badge-super-senior'
+                                  : a.experience === 'Senior'
                                   ? 'badge-senior'
                                   : a.experience === 'Mid'
                                   ? 'badge-mid'
                                   : 'badge-junior'
                               }`}
                             >
-                              {a.experience}
+                              {a.experience === 'Super Senior' ? '👑 Super Senior' : a.experience}
                             </span>
                             <span className="badge badge-status-completed">
                               <CheckCircle2 size={12} /> Stayed Overtime
                             </span>
                           </div>
                           <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                            Duty at: <strong>{a.warehouse_name}</strong> · Home Base: {a.home_warehouse_name || 'Standard'}
+                            Duty at: <strong>{a.warehouse_name || 'Main Warehouse'}</strong>
                           </div>
                         </div>
 
@@ -876,210 +941,246 @@ export default function CalendarView({
             </div>
           ) : (
             /* =========================================================================
-                TODAY OR FUTURE: WAREHOUSE STAFFING CARDS
+                TODAY OR FUTURE: SINGLE FACILITY OVERTIME STAFFING CARD
                 ========================================================================= */
             (!isSelectedSunday || isEmergencySundayActive) && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {displayWarehouses.map((warehouse) => {
-                  const whAssignments = selectedAssignments.filter(
-                    (a) => String(a.warehouse_id) === String(warehouse.id)
-                  );
+                <div
+                  style={{
+                    backgroundColor: 'var(--bg-surface-elevated)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '1.25rem',
+                    border: '1px solid var(--border-color)',
+                  }}
+                >
+                  {/* Warehouse Header */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '1rem',
+                      borderBottom: '1px solid var(--border-color)',
+                      paddingBottom: '0.65rem',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Building2 size={18} color="var(--accent-blue)" />
+                      <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>Main Warehouse</span>
+                      <span className="badge badge-mid" style={{ fontSize: '0.72rem' }}>
+                        Single Facility
+                      </span>
+                    </div>
 
-                  return (
-                    <div
-                      key={warehouse.id}
-                      style={{
-                        backgroundColor: 'var(--bg-surface-elevated)',
-                        borderRadius: 'var(--radius-md)',
-                        padding: '1.15rem',
-                        border: '1px solid var(--border-color)',
-                      }}
-                    >
-                      {/* Warehouse Header */}
-                      <div
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleOpenSuperSeniorModal(selectedDateStr)}
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: '0.85rem',
-                          borderBottom: '1px solid var(--border-color)',
-                          paddingBottom: '0.5rem',
+                          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.2))',
+                          border: '1px solid rgba(245, 158, 11, 0.5)',
+                          color: '#fbbf24',
+                          fontWeight: 700,
+                          fontSize: '0.78rem',
+                          padding: '0.25rem 0.65rem',
                         }}
+                        title="Dispatch on-call Super Senior for emergency big shipments"
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <Building2 size={17} color="var(--accent-blue)" />
-                          <span style={{ fontWeight: 800, fontSize: '1.05rem' }}>{warehouse.name}</span>
-                        </div>
+                        👑 Emergency Super Senior
+                      </button>
 
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          Need: <strong>1 worker</strong> (standard)
-                        </div>
-                      </div>
-
-                      {/* Workers Assigned / Scheduled */}
-                      <div>
-                        {whAssignments.length === 0 ? (
-                          <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '0.75rem' }}>
-                              No pickup worker selected yet for {warehouse.name}.
-                            </p>
-                            <button
-                              className="btn btn-primary btn-sm"
-                              onClick={() => handleQuickAutoSelect(warehouse.id)}
-                            >
-                              <Sparkles size={14} /> Auto-Select Today's Overtime Worker
-                            </button>
-                          </div>
-                        ) : (
-                          whAssignments.map((a) => {
-                            const isStayed = a.status === 'completed';
-                            const isAbsent = a.status === 'absent';
-                            const isScheduled = a.status === 'scheduled';
-                            const isCrossCover =
-                              a.home_warehouse_id &&
-                              String(a.home_warehouse_id) !== String(warehouse.id);
-
-                            return (
-                              <div
-                                key={a.id}
-                                style={{
-                                  backgroundColor: 'var(--bg-surface)',
-                                  borderRadius: 'var(--radius-sm)',
-                                  padding: '0.85rem',
-                                  border: '1px solid var(--border-color)',
-                                  marginBottom: '0.65rem',
-                                }}
-                              >
-                                {/* Worker Profile Header */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                  <div>
-                                    <div style={{ fontSize: '1.05rem', fontWeight: 800 }}>
-                                      {a.employee_name}
-                                    </div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.25rem', alignItems: 'center' }}>
-                                      <span
-                                        className={`badge ${
-                                          a.experience === 'Senior'
-                                            ? 'badge-senior'
-                                            : a.experience === 'Mid'
-                                            ? 'badge-mid'
-                                            : 'badge-junior'
-                                        }`}
-                                      >
-                                        {a.experience}
-                                      </span>
-                                      <span className="badge" style={{ background: 'var(--bg-surface-elevated)' }}>
-                                        Skill: {a.skill}/5
-                                      </span>
-                                      {isCrossCover ? (
-                                        <span className="cross-cover-badge" title="Employee is based at another warehouse and covering duty here">
-                                          Covering from: {a.home_warehouse_name}
-                                        </span>
-                                      ) : (
-                                        <span className="badge" style={{ background: 'var(--bg-surface-elevated)' }}>
-                                          Home: {a.home_warehouse_name || warehouse.name}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <div>
-                                    {isStayed && (
-                                      <span className="badge badge-status-completed">
-                                        <CheckCircle2 size={12} /> Stayed Overtime
-                                      </span>
-                                    )}
-                                    {isAbsent && (
-                                      <span className="badge badge-status-absent">
-                                        <XCircle size={12} /> Absent Today
-                                      </span>
-                                    )}
-                                    {isScheduled && (
-                                      <span className="badge badge-status-scheduled">
-                                        <Clock size={12} /> Assigned for Today
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Deterministic Logic Explanation */}
-                                <div
-                                  style={{
-                                    fontSize: '0.78rem',
-                                    color: 'var(--accent-blue)',
-                                    marginTop: '0.5rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.35rem',
-                                    backgroundColor: 'rgba(56, 189, 248, 0.08)',
-                                    padding: '0.3rem 0.5rem',
-                                    borderRadius: '4px',
-                                  }}
-                                >
-                                  <Info size={12} />
-                                  <span>Deterministic fair selection: next in rotation with lowest prior completed turns</span>
-                                </div>
-
-                                {isAbsent && (
-                                  <div
-                                    style={{
-                                      fontSize: '0.78rem',
-                                      color: '#fca5a5',
-                                      marginTop: '0.4rem',
-                                      padding: '0.3rem 0.5rem',
-                                      backgroundColor: 'var(--badge-absent-bg)',
-                                      borderRadius: '4px',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.3rem',
-                                    }}
-                                  >
-                                    <AlertTriangle size={12} />
-                                    <span>Priority queued for makeup duty on their next present day!</span>
-                                  </div>
-                                )}
-
-                                {/* Actions for Today */}
-                                {!isAbsent && (
-                                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
-                                    {!isStayed && (
-                                      <button
-                                        className="btn btn-success btn-sm"
-                                        style={{ flex: 1 }}
-                                        onClick={() => onUpdateStatus(a.id, 'completed')}
-                                      >
-                                        <UserCheck size={14} /> Confirm Stayed
-                                      </button>
-                                    )}
-
-                                    {/* Mark Absent / Sick with instant replacement */}
-                                    <button
-                                      className="btn btn-danger btn-sm"
-                                      style={{ flex: 1 }}
-                                      onClick={() => handleOpenAbsenceModal(a)}
-                                      title="Employee is absent today. Click to log sick/custom reason and auto-select replacement!"
-                                    >
-                                      <UserX size={14} /> Mark Absent / Sick
-                                    </button>
-
-                                    {isStayed && (
-                                      <button
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={() => onUpdateStatus(a.id, 'scheduled')}
-                                      >
-                                        Revert
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                        Standard: <strong>2 workers</strong>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+
+                  {/* Workers Assigned / Scheduled */}
+                  <div>
+                    {selectedAssignments.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '0.85rem' }}>
+                          No overtime workers selected yet for this date.
+                        </p>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleQuickAutoSelect()}
+                        >
+                          <Sparkles size={14} /> Auto-Select Today's Overtime Crew (2 Workers)
+                        </button>
+                      </div>
+                    ) : (
+                      selectedAssignments.map((a) => {
+                        const isStayed = a.status === 'completed';
+                        const isAbsent = a.status === 'absent';
+                        const isScheduled = a.status === 'scheduled';
+                        const isSuperSenior = a.experience === 'Super Senior';
+
+                        return (
+                          <div
+                            key={a.id}
+                            style={{
+                              backgroundColor: isSuperSenior ? 'rgba(245, 158, 11, 0.05)' : 'var(--bg-surface)',
+                              borderRadius: 'var(--radius-sm)',
+                              padding: '0.95rem 1.1rem',
+                              border: isSuperSenior ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid var(--border-color)',
+                              marginBottom: '0.75rem',
+                              boxShadow: isSuperSenior ? '0 0 12px rgba(245, 158, 11, 0.1)' : 'none',
+                            }}
+                          >
+                            {/* Worker Profile Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                              <div>
+                                <div style={{ fontSize: '1.08rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                  {isSuperSenior && <span>👑</span>}
+                                  <span>{a.employee_name}</span>
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.3rem', alignItems: 'center' }}>
+                                  {isSuperSenior ? (
+                                    <span className="badge badge-super-senior">
+                                      👑 Super Senior (On-Call)
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={`badge ${
+                                        a.experience === 'Senior'
+                                          ? 'badge-senior'
+                                          : a.experience === 'Mid'
+                                          ? 'badge-mid'
+                                          : 'badge-junior'
+                                      }`}
+                                    >
+                                      {a.experience}
+                                    </span>
+                                  )}
+                                  <span className="badge" style={{ background: 'var(--bg-surface-elevated)' }}>
+                                    Skill: {a.skill}/5
+                                  </span>
+                                  {isSuperSenior ? (
+                                    <span className="badge badge-mid" style={{ fontSize: '0.72rem' }}>
+                                      Big Shipment Crew
+                                    </span>
+                                  ) : (
+                                    <span className="badge" style={{ background: 'var(--bg-surface-elevated)', fontSize: '0.72rem' }}>
+                                      Main Facility
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div>
+                                {isStayed && (
+                                  <span className="badge badge-status-completed">
+                                    <CheckCircle2 size={12} /> Stayed Overtime
+                                  </span>
+                                )}
+                                {isAbsent && (
+                                  <span className="badge badge-status-absent">
+                                    <XCircle size={12} /> Absent Today
+                                  </span>
+                                )}
+                                {isScheduled && (
+                                  <span className="badge badge-status-scheduled">
+                                    <Clock size={12} /> Assigned for Shift
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Deterministic Logic Explanation */}
+                            <div
+                              style={{
+                                fontSize: '0.78rem',
+                                color: isSuperSenior ? 'var(--accent-amber)' : 'var(--accent-blue)',
+                                marginTop: '0.55rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                backgroundColor: isSuperSenior ? 'rgba(245, 158, 11, 0.08)' : 'rgba(56, 189, 248, 0.08)',
+                                padding: '0.35rem 0.55rem',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              <Info size={12} />
+                              <span>
+                                {isSuperSenior
+                                  ? 'Super Senior on-duty for emergency big shipment (excluded from regular algorithm)'
+                                  : 'Deterministic fair rotation: next in cohort with lowest prior completed turns & anti-consecutive rest'}
+                              </span>
+                            </div>
+
+                            {isAbsent && (
+                              <div
+                                style={{
+                                  fontSize: '0.78rem',
+                                  color: '#fca5a5',
+                                  marginTop: '0.4rem',
+                                  padding: '0.3rem 0.5rem',
+                                  backgroundColor: 'var(--badge-absent-bg)',
+                                  borderRadius: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                }}
+                              >
+                                <AlertTriangle size={12} />
+                                <span>Priority queued for makeup duty on their next present day!</span>
+                              </div>
+                            )}
+
+                            {/* Actions */}
+                            {!isAbsent && (
+                              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                                {!isStayed && (
+                                  <button
+                                    className="btn btn-success btn-sm"
+                                    style={{ flex: 1 }}
+                                    onClick={() => onUpdateStatus(a.id, 'completed')}
+                                  >
+                                    <UserCheck size={14} /> Confirm Stayed
+                                  </button>
+                                )}
+
+                                {!isSuperSenior && (
+                                  <button
+                                    className="btn btn-danger btn-sm"
+                                    style={{ flex: 1 }}
+                                    onClick={() => handleOpenAbsenceModal(a)}
+                                    title="Employee is absent today. Click to log sick/custom reason and auto-select replacement!"
+                                  >
+                                    <UserX size={14} /> Mark Absent / Sick
+                                  </button>
+                                )}
+
+                                {isSuperSenior && (
+                                  <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => handleOpenSuperSeniorModal(selectedDateStr)}
+                                    title="Adjust crew mode or remove Super Senior"
+                                  >
+                                    👑 Adjust / Remove
+                                  </button>
+                                )}
+
+                                {isStayed && (
+                                  <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => onUpdateStatus(a.id, 'scheduled')}
+                                  >
+                                    Revert
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
               </div>
             )
           )}
@@ -1090,9 +1191,9 @@ export default function CalendarView({
               <button
                 className="btn btn-primary"
                 style={{ width: '100%', padding: '0.65rem 1rem', fontSize: '0.92rem' }}
-                onClick={() => handleQuickAutoSelect(null)}
+                onClick={() => handleQuickAutoSelect()}
               >
-                <Sparkles size={16} /> Auto-Generate Fair Pickup Crew for Both Warehouses
+                <Sparkles size={16} /> Auto-Generate Fair Pickup Crew (2 Workers)
               </button>
             </div>
           )}
@@ -1307,6 +1408,139 @@ export default function CalendarView({
                   disabled={isSubmittingBackfill || !backfillEmpId}
                 >
                   {isSubmittingBackfill ? 'Saving Record...' : 'Save Historical Pickup'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          EMERGENCY SUPER SENIOR MODAL (USER REQUEST)
+          ========================================================================= */}
+      {isSuperSeniorModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsSuperSeniorModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#fbbf24' }}>
+                <span style={{ fontSize: '1.25rem' }}>👑</span>
+                Emergency Super Senior Dispatch
+              </h3>
+              <button className="btn btn-secondary btn-sm" onClick={() => setIsSuperSeniorModalOpen(false)}>
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: 1.5 }}>
+              Super Seniors are on-call leaders who only stay for emergency big shipments. The regular rotation algorithm never schedules them. They can stay <strong>alone</strong>, with <strong>1 worker</strong>, or with <strong>2 workers</strong>.
+            </p>
+
+            <form onSubmit={handleConfirmSuperSenior}>
+              <div className="form-group">
+                <label className="form-label">Duty Date:</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={selectedDateStr}
+                  onChange={(e) => setSelectedDateStr(e.target.value)}
+                  required
+                />
+              </div>
+
+              {superSeniorCrewMode !== 'remove' && (
+                <div className="form-group">
+                  <label className="form-label">Select On-Call Super Senior:</label>
+                  {superSeniorList.length === 0 ? (
+                    <div className="alert-box alert-warning" style={{ fontSize: '0.84rem' }}>
+                      No active Super Senior configured yet. Please edit or add an employee with experience level <strong>Super Senior</strong> in the Staff / Employees roster first.
+                    </div>
+                  ) : (
+                    <select
+                      className="form-select"
+                      value={superSeniorId}
+                      onChange={(e) => setSuperSeniorId(e.target.value)}
+                      required
+                    >
+                      {superSeniorList.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          👑 {emp.name} (Skill: {emp.skill}/5)
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="form-label">Select Crew Mode for This Big Shipment:</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {[
+                    { mode: 'alone', title: '👑 Super Senior Stays ALONE', desc: '0 normal workers. Only the Super Senior stays for the shipment.' },
+                    { mode: 'with_1', title: '👑 Super Senior + 1 Normal Worker', desc: '1 regular worker stays alongside the Super Senior.' },
+                    { mode: 'with_2', title: '👑 Super Senior + 2 Normal Workers', desc: '2 regular workers stay alongside the Super Senior (Full crew of 3).' },
+                    { mode: 'remove', title: '✕ Remove Super Senior', desc: 'Reset this date to normal 2 regular overtime workers.' },
+                  ].map((option) => (
+                    <label
+                      key={option.mode}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '0.65rem',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: '8px',
+                        border: '1px solid',
+                        borderColor: superSeniorCrewMode === option.mode ? 'rgba(245, 158, 11, 0.7)' : 'var(--border-color)',
+                        backgroundColor: superSeniorCrewMode === option.mode ? 'rgba(245, 158, 11, 0.12)' : 'var(--bg-surface-elevated)',
+                        cursor: 'pointer',
+                        transition: 'all 0.18s ease',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="superSeniorCrewMode"
+                        value={option.mode}
+                        checked={superSeniorCrewMode === option.mode}
+                        onChange={() => setSuperSeniorCrewMode(option.mode)}
+                        style={{ marginTop: '3px' }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: superSeniorCrewMode === option.mode ? '#fbbf24' : 'var(--text-primary)' }}>
+                          {option.title}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          {option.desc}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsSuperSeniorModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={isSubmittingSuperSenior || (superSeniorCrewMode !== 'remove' && superSeniorList.length === 0)}
+                  style={{
+                    background: superSeniorCrewMode === 'remove'
+                      ? 'var(--accent-red)'
+                      : 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)',
+                    color: '#fff',
+                    fontWeight: 700,
+                  }}
+                >
+                  {isSubmittingSuperSenior
+                    ? 'Saving...'
+                    : superSeniorCrewMode === 'remove'
+                    ? 'Remove Super Senior'
+                    : 'Confirm Super Senior Duty'}
                 </button>
               </div>
             </form>

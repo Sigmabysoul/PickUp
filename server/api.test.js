@@ -38,8 +38,9 @@ test('API Server Lifecycle & Endpoints', async (t) => {
       ('__Test_Alice__', 'Senior', 5, $1, true),
       ('__Test_Bob__', 'Junior', 1, $1, true),
       ('__Test_Charlie__', 'Mid', 4, $2, true),
-      ('__Test_Diana__', 'Junior', 2, $2, true)
-    RETURNING id, name, warehouse_id;
+      ('__Test_Diana__', 'Junior', 2, $2, true),
+      ('__Test_SuperSenior__', 'Super Senior', 5, $1, true)
+    RETURNING id, name, warehouse_id, experience;
   `, [testWarehouses[0].id, testWarehouses[1].id]);
   testEmployees = empRes.rows;
 
@@ -52,9 +53,9 @@ test('API Server Lifecycle & Endpoints', async (t) => {
       await pool.query("UPDATE assignments SET replaces_assignment_id = NULL WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
       await pool.query("DELETE FROM assignments WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
       await pool.query("DELETE FROM employees WHERE name LIKE '__Test_%'");
-      await pool.query("DELETE FROM assignment_runs WHERE duty_date IN ('2026-09-25', '2026-09-28')");
-      await pool.query("DELETE FROM assignments WHERE duty_date IN ('2026-09-25', '2026-09-28', '2026-09-01', '2026-09-27')");
-      await pool.query("DELETE FROM daily_logs WHERE duty_date IN ('2026-09-25', '2026-09-28', '2026-09-01', '2026-09-27')");
+      await pool.query("DELETE FROM assignment_runs WHERE duty_date IN ('2026-09-25', '2026-09-28', '2026-09-29')");
+      await pool.query("DELETE FROM assignments WHERE duty_date IN ('2026-09-25', '2026-09-28', '2026-09-01', '2026-09-27', '2026-09-29')");
+      await pool.query("DELETE FROM daily_logs WHERE duty_date IN ('2026-09-25', '2026-09-28', '2026-09-01', '2026-09-27', '2026-09-29')");
       await pool.query("DELETE FROM absences WHERE starts_on = '2026-09-28'");
     } catch (e) {
       console.error('Test cleanup error:', e);
@@ -364,5 +365,88 @@ test('API Server Lifecycle & Endpoints', async (t) => {
       body: JSON.stringify({ passcode: 'updatedpass456' }),
     });
     assert.equal(loginRes.status, 401);
+  });
+
+  await t.test('POST /api/assignments/super-senior deploys Super Senior in "alone" mode', async () => {
+    const superSenior = testEmployees.find((e) => e.experience === 'Super Senior');
+    assert.ok(superSenior);
+
+    const res = await apiFetch(`${baseUrl}/api/assignments/super-senior`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        duty_date: '2026-09-29',
+        warehouse_id: testWarehouses[0].id,
+        super_senior_id: superSenior.id,
+        crew_mode: 'alone',
+      }),
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.success, true);
+    assert.equal(data.crew_mode, 'alone');
+    assert.equal(data.assignments.length, 1);
+    assert.equal(data.assignments[0].employee_id, superSenior.id);
+  });
+
+  await t.test('POST /api/assignments/super-senior deploys Super Senior in "with_1" mode', async () => {
+    const superSenior = testEmployees.find((e) => e.experience === 'Super Senior');
+
+    const res = await apiFetch(`${baseUrl}/api/assignments/super-senior`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        duty_date: '2026-09-29',
+        warehouse_id: testWarehouses[0].id,
+        super_senior_id: superSenior.id,
+        crew_mode: 'with_1',
+      }),
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.success, true);
+    assert.equal(data.crew_mode, 'with_1');
+    assert.equal(data.assignments.length, 2);
+    assert.ok(data.assignments.some((a) => a.employee_id === superSenior.id));
+  });
+
+  await t.test('POST /api/assignments/super-senior deploys Super Senior in "with_2" mode', async () => {
+    const superSenior = testEmployees.find((e) => e.experience === 'Super Senior');
+
+    const res = await apiFetch(`${baseUrl}/api/assignments/super-senior`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        duty_date: '2026-09-29',
+        warehouse_id: testWarehouses[0].id,
+        super_senior_id: superSenior.id,
+        crew_mode: 'with_2',
+      }),
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.success, true);
+    assert.equal(data.crew_mode, 'with_2');
+    assert.equal(data.assignments.length, 3);
+    assert.ok(data.assignments.some((a) => a.employee_id === superSenior.id));
+  });
+
+  await t.test('POST /api/assignments/super-senior removes Super Senior duty when crew_mode is "remove"', async () => {
+    const res = await apiFetch(`${baseUrl}/api/assignments/super-senior`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        duty_date: '2026-09-29',
+        warehouse_id: testWarehouses[0].id,
+        crew_mode: 'remove',
+      }),
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.success, true);
+    assert.equal(data.crew_mode, 'remove');
+    assert.equal(data.assignments.length, 2);
+    const superSenior = testEmployees.find((e) => e.experience === 'Super Senior');
+    assert.ok(!data.assignments.some((a) => a.employee_id === superSenior.id));
   });
 });

@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS app_users (
 );
 
 INSERT INTO warehouses (name, active)
-VALUES ('Old Warehouse', true), ('New Warehouse', true)
+VALUES ('Main Warehouse', true)
 ON CONFLICT (name) DO NOTHING;
 `;
 
@@ -132,7 +132,7 @@ export async function initDb() {
     if (fs.existsSync(schemaPath)) {
       sql = fs.readFileSync(schemaPath, 'utf8') + `
         INSERT INTO warehouses (name, active)
-        VALUES ('Old Warehouse', true), ('New Warehouse', true)
+        VALUES ('Main Warehouse', true)
         ON CONFLICT (name) DO NOTHING;
       `;
     }
@@ -141,6 +141,16 @@ export async function initDb() {
   const client = await pool.connect();
   try {
     await client.query(sql);
+
+    // Apply incremental migrations safely
+    await client.query(`
+      ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_experience_check;
+      ALTER TABLE employees ADD CONSTRAINT employees_experience_check CHECK (experience IN ('Junior', 'Mid', 'Senior', 'Super Senior'));
+      ALTER TABLE employees ADD COLUMN IF NOT EXISTS initial_completed_count INTEGER DEFAULT 0 NOT NULL;
+      UPDATE warehouses SET active = (name = 'Main Warehouse');
+    `);
+  } catch (err) {
+    console.error('Database migration warning:', err.message);
   } finally {
     client.release();
   }
