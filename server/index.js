@@ -901,7 +901,6 @@ app.post('/api/assignments/super-senior', async (req, res) => {
       }
 
       await client.query('COMMIT');
-      return res.json({ success: true, message: 'Super Senior removed for this date', duty_date });
 
       const updatedAssignments = await pool.query(
         `SELECT a.id, a.employee_id, a.warehouse_id, to_char(a.duty_date, 'YYYY-MM-DD') as duty_date,

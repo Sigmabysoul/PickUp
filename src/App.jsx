@@ -421,20 +421,46 @@ export default function App() {
       {/* Navigation Bar */}
       <header className="navbar">
         <div className="navbar-top-row">
-          <div className="nav-brand">
-            <div className="brand-icon">
-              <Truck size={20} />
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span className="brand-title">PickUp</span>
-                <span className="brand-badge">Dispatcher</span>
-              </div>
-              <div className="brand-subtitle">
-                {activeEmployeeCount} Active Staff · Main Warehouse (2 Overtime Workers)
-              </div>
-            </div>
+          {/* Replaced app logo with Employ and Fairness options */}
+          <div className="nav-left-tabs">
+            <button
+              type="button"
+              className={`nav-tab ${activeTab === 'employees' ? 'active' : ''}`}
+              onClick={() => setActiveTab('employees')}
+              title="Employee Staff Roster"
+            >
+              <Users size={15} />
+              <span>Employees</span>
+              <span className="nav-pill-count">{activeEmployeeCount}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`nav-tab ${activeTab === 'analytics' ? 'active' : ''}`}
+              onClick={() => setActiveTab('analytics')}
+              title="Fairness & Rotation Analytics"
+            >
+              <BarChart3 size={15} />
+              <span>Fairness</span>
+            </button>
           </div>
+
+          <nav className="nav-tabs">
+            <button
+              className={`nav-tab ${activeTab === 'calendar' ? 'active' : ''}`}
+              onClick={() => setActiveTab('calendar')}
+            >
+              <Calendar size={15} />
+              <span>Calendar & Dispatch</span>
+            </button>
+            <button
+              className={`nav-tab ${activeTab === 'warehouses' ? 'active' : ''}`}
+              onClick={() => setActiveTab('warehouses')}
+            >
+              <Building2 size={15} />
+              <span>Settings</span>
+            </button>
+          </nav>
 
           <div className="nav-actions">
             {/* Theme Switcher */}
@@ -470,79 +496,10 @@ export default function App() {
             </button>
           </div>
         </div>
-
-        <nav className="nav-tabs">
-          <button
-            className={`nav-tab ${activeTab === 'calendar' ? 'active' : ''}`}
-            onClick={() => setActiveTab('calendar')}
-          >
-            <Calendar size={15} />
-            <span>Calendar & Dispatch</span>
-          </button>
-          <button
-            className={`nav-tab ${activeTab === 'warehouses' ? 'active' : ''}`}
-            onClick={() => setActiveTab('warehouses')}
-          >
-            <Building2 size={15} />
-            <span>Settings</span>
-          </button>
-        </nav>
       </header>
 
-      {/* Main Body Layout with Left Sidebar */}
-      <div className="app-layout-with-sidebar">
-        {/* Left Navigation Sidebar: All except Settings and Calendar & Dispatch */}
-        <aside className="app-left-sidebar" aria-label="Secondary Navigation">
-          <div className="sidebar-section-title">MANAGEMENT & EQUITY</div>
-
-          <button
-            type="button"
-            className={`sidebar-nav-btn ${activeTab === 'employees' ? 'active' : ''}`}
-            onClick={() => setActiveTab('employees')}
-          >
-            <div className="sidebar-nav-btn-left">
-              <Users size={17} />
-              <div style={{ textAlign: 'left' }}>
-                <div className="sidebar-nav-label">Employees</div>
-                <div className="sidebar-nav-sub">Staff roster & leaves</div>
-              </div>
-            </div>
-            <span className="sidebar-pill-badge">{activeEmployeeCount}</span>
-          </button>
-
-          <button
-            type="button"
-            className={`sidebar-nav-btn ${activeTab === 'analytics' ? 'active' : ''}`}
-            onClick={() => setActiveTab('analytics')}
-          >
-            <div className="sidebar-nav-btn-left">
-              <BarChart3 size={17} />
-              <div style={{ textAlign: 'left' }}>
-                <div className="sidebar-nav-label">Fairness</div>
-                <div className="sidebar-nav-sub">Equity & shift turns</div>
-              </div>
-            </div>
-          </button>
-
-          {/* Quick Super Senior Status Pill */}
-          <div className="sidebar-info-card">
-            <div className="sidebar-info-header">
-              <span style={{ fontSize: '1.05rem' }}>👑</span>
-              <strong>Super Senior</strong>
-            </div>
-            <p className="sidebar-info-text">
-              Emergency on-call crew for big shipments. Never scheduled daily.
-            </p>
-            <div className="sidebar-info-stats">
-              <span>{data.employees.filter((e) => e.experience === 'Super Senior').length} On-Call</span>
-              <span className="sidebar-info-dot">·</span>
-              <span>1 Facility (2 OT)</span>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content Area */}
-        <main className="main-content">
+      {/* Main Content Area */}
+      <main className="main-content">
           {error && (
             <div className="alert-box alert-warning">
               <span>Unable to connect to backend server: {error}</span>
@@ -618,7 +575,6 @@ export default function App() {
           )}
         </div>
       </main>
-    </div>
 
       {/* Mobile Bottom Navigation Bar (Thumb-Friendly, Fixed Bottom) */}
       <nav className="mobile-bottom-bar" aria-label="Mobile Navigation">
