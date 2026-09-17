@@ -1551,16 +1551,77 @@ app.get('/api/export', async (req, res) => {
         'Skill Rating',
         'Duty Status',
         'Facility Outcome',
+        'Day',
+        'Assigned Staff 1',
+        'Assigned Staff 2',
+        'Super Senior (Emergency)',
+        'Facility Outcome / Status',
         'Notes',
       ],
     ];
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+    // Group records by duty_date
+    const assignMap = new Map();
     for (const r of records) {
       const d = new Date(r.duty_date + 'T00:00:00');
       const dayOfWeek = dayNames[d.getDay()] || '';
       const dayLog = logMap.get(r.duty_date);
+      if (!assignMap.has(r.duty_date)) {
+        assignMap.set(r.duty_date, []);
+      }
+      assignMap.get(r.duty_date).push(r);
+    }
+
+    const [yearStr, monthStr] = month.split('-');
+    const daysInMonth = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10), 0).getDate();
+
+    let totalStays = 0;
+    let before7pmDays = 0;
+    let noPickupDays = 0;
+    let sundaysOffDays = 0;
+    let holidayDays = 0;
+    const perStaffStays = new Map();
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayStr = String(d).padStart(2, '0');
+      const dateStr = `${month}-${dayStr}`;
+      const dateObj = new Date(dateStr + 'T00:00:00');
+      const dayName = dayNames[dateObj.getDay()];
+      const isSunday = dateObj.getDay() === 0;
+
+      const dayAssigns = assignMap.get(dateStr) || [];
+      const activeAssigns = dayAssigns.filter((a) => a.status !== 'absent');
+      const normalWorkers = activeAssigns.filter((a) => a.experience !== 'Super Senior');
+      const superSeniors = activeAssigns.filter((a) => a.experience === 'Super Senior');
+
+      const dayLog = logMap.get(dateStr);
+      let outcome = 'no_pickup';
+
+      if (dayLog) {
+        outcome = dayLog.status;
+      } else if (activeAssigns.length > 0) {
+        outcome = 'overtime_stay';
+      } else if (isSunday) {
+        outcome = 'sunday_off';
+      } else {
+        outcome = 'no_pickup';
+      }
+
+      if (outcome === 'overtime_stay') totalStays++;
+      else if (outcome === 'before_7pm') before7pmDays++;
+      else if (outcome === 'no_pickup') noPickupDays++;
+      else if (outcome === 'sunday_off') sundaysOffDays++;
+      else if (outcome === 'holiday') holidayDays++;
+
+      for (const a of activeAssigns) {
+        if (a.status === 'completed' || outcome === 'overtime_stay') {
+          const existing = perStaffStays.get(a.employee_name) || { count: 0, experience: a.experience };
+          existing.count += 1;
+          perStaffStays.set(a.employee_name, existing);
+        }
+      }
 
       rows.push([
         r.duty_date,
@@ -1571,6 +1632,12 @@ app.get('/api/export', async (req, res) => {
         `${r.skill}/5`,
         r.status.toUpperCase(),
         dayLog ? dayLog.status.replace('_', ' ').toUpperCase() : 'STANDARD',
+        dateStr,
+        dayName,
+        normalWorkers[0]?.employee_name || '-',
+        normalWorkers[1]?.employee_name || '-',
+        superSeniors.map((s) => s.employee_name).join(', ') || '-',
+        outcome.replace('_', ' ').toUpperCase(),
         dayLog?.notes || '',
       ]);
     }
@@ -1582,6 +1649,27 @@ app.get('/api/export', async (req, res) => {
     rows.push(['Scheduled Shifts', scheduledCount]);
     rows.push(['Reported Absences', absentCount]);
     rows.push(['Unique Staff Dispatched', uniqueEmployees]);
+    rows.push(['Total Overtime Pickup Stays (Days)', totalStays]);
+    rows.push(['Total Days Pickup Happened Before 7 PM', before7pmDays]);
+    rows.push(['Total Days No Pickup Happened', noPickupDays]);
+    rows.push(['Total Sundays (Facility Off)', sundaysOffDays]);
+    rows.push(['Combined Days: No Pickup Happened + Sundays', noPickupDays + sundaysOffDays]);
+    rows.push(['Total Facility Holidays (Closed)', holidayDays]);
+    rows.push([]);
+    rows.push(['--- TOTAL NUMBER OF DAYS STAFF STAYED (PER EMPLOYEE + SUPER SENIOR) ---']);
+    rows.push(['Employee Name', 'Rank / Experience', 'Total Overtime Stays (Days)']);
+
+    const staffList = Array.from(perStaffStays.entries())
+      .map(([name, data]) => ({ name, experience: data.experience, stays: data.count }))
+      .sort((a, b) => b.stays - a.stays);
+
+    if (staffList.length > 0) {
+      for (const s of staffList) {
+        rows.push([s.name, s.experience, s.stays]);
+      }
+    } else {
+      rows.push(['No completed overtime stays logged for this month', '', 0]);
+    }
 
     const csvContent =
       '\uFEFF' +

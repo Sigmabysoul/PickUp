@@ -58,10 +58,13 @@ export default function CalendarView({
   const [isSubmittingAbsence, setIsSubmittingAbsence] = useState(false);
 
   // Manual Historical Backfill state
+  // Manual Historical Backfill state (2 slots for standard 2-worker crews)
   const [isBackfillModalOpen, setIsBackfillModalOpen] = useState(false);
   const [backfillDate, setBackfillDate] = useState('2026-09-15');
   const [backfillWhId, setBackfillWhId] = useState('');
   const [backfillEmpId, setBackfillEmpId] = useState('');
+  const [backfillEmpId1, setBackfillEmpId1] = useState('');
+  const [backfillEmpId2, setBackfillEmpId2] = useState('');
   const [isSubmittingBackfill, setIsSubmittingBackfill] = useState(false);
 
   // Loading & Feedback states
@@ -300,26 +303,54 @@ export default function CalendarView({
   };
 
   // Backfill Modal Handlers
+  // Backfill Modal Handlers (2 slots for standard 2-person crew)
   const handleOpenBackfillModal = (dateToUse = selectedDateStr) => {
     setBackfillDate(dateToUse);
     setBackfillWhId(warehouses[0]?.id || '2');
     const firstActive = employees.find((e) => e.active);
     setBackfillEmpId(firstActive ? firstActive.id : '');
+    setBackfillWhId(activeWarehouse?.id || warehouses[0]?.id || '1');
+    const activeEmps = employees.filter((e) => e.active);
+    setBackfillEmpId1(activeEmps[0] ? String(activeEmps[0].id) : '');
+    setBackfillEmpId2(activeEmps[1] ? String(activeEmps[1].id) : '');
     setIsBackfillModalOpen(true);
   };
 
   const handleConfirmBackfill = async (e) => {
     e.preventDefault();
     if (!backfillEmpId || !backfillWhId || !backfillDate) return;
+    if (!backfillEmpId1 || !backfillDate) {
+      alert('Please select at least one employee for the pickup record.');
+      return;
+    }
+    const whId = backfillWhId || activeWarehouse?.id || warehouses[0]?.id || '1';
     setIsSubmittingBackfill(true);
     try {
+      // 1. Log First Employee
       await onLogHistoricalPickup({
         employee_id: backfillEmpId,
         warehouse_id: backfillWhId,
+        employee_id: backfillEmpId1,
+        warehouse_id: whId,
         duty_date: backfillDate,
       });
+
+      // 2. Log Second Employee if selected and different
+      if (backfillEmpId2 && String(backfillEmpId2) !== String(backfillEmpId1)) {
+        await onLogHistoricalPickup({
+          employee_id: backfillEmpId2,
+          warehouse_id: whId,
+          duty_date: backfillDate,
+        });
+      }
+
       setIsBackfillModalOpen(false);
       showToast(`Logged historical pickup for ${backfillDate}!`);
+      showToast(
+        backfillEmpId2 && String(backfillEmpId2) !== String(backfillEmpId1)
+          ? `Logged 2-worker historical pickup for ${backfillDate}!`
+          : `Logged historical pickup for ${backfillDate}!`
+      );
     } catch (err) {
       alert(err.message);
     } finally {
@@ -458,6 +489,9 @@ export default function CalendarView({
                   if (!cell.isCurrentMonth) cellClass += ' day-other-month';
 
                   if (statusInfo.type === 'overtime_stay') {
+                  if (hasSuperSenior) {
+                    cellClass += ' day-status-supersenior';
+                  } else if (statusInfo.type === 'overtime_stay') {
                     cellClass += ' day-status-overtime';
                   } else if (statusInfo.type === 'before_7pm') {
                     cellClass += ' day-status-before7pm';
@@ -504,26 +538,34 @@ export default function CalendarView({
                 <div className="legend-item">
                   <span className="legend-dot dot-overtime"></span>
                   <span className="legend-text">Overtime Stay</span>
+                  <span className="legend-text">Overtime Stay (Green)</span>
                 </div>
                 <div className="legend-item">
                   <span style={{ fontSize: '0.85rem' }}>👑</span>
                   <span className="legend-text">Super Senior</span>
+                  <span className="legend-dot dot-supersenior"></span>
+                  <span style={{ fontSize: '0.82rem', marginLeft: '-2px' }}>👑</span>
+                  <span className="legend-text">Super Senior (Purple)</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-before7pm"></span>
                   <span className="legend-text">Done Before 7pm</span>
+                  <span className="legend-text">Before 7pm (Light Blue)</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-nopickup"></span>
                   <span className="legend-text">No Pickup</span>
+                  <span className="legend-text">No Pickup (Red)</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-holiday"></span>
                   <span className="legend-text">Holiday (Closed)</span>
+                  <span className="legend-text">Holiday (Dark Blue)</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-sunday"></span>
                   <span className="legend-text">Sunday Off</span>
+                  <span className="legend-text">Sunday Off (Grey)</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-scheduled"></span>
@@ -1453,14 +1495,18 @@ export default function CalendarView({
 
               <div className="form-group">
                 <label className="form-label">Employee Who Stayed Overtime:</label>
+                <label className="form-label">Employee 1 Who Stayed Overtime (Slot 1):</label>
                 <select
                   className="form-select"
                   value={backfillEmpId}
                   onChange={(e) => setBackfillEmpId(e.target.value)}
+                  value={backfillEmpId1}
+                  onChange={(e) => setBackfillEmpId1(e.target.value)}
                   required
                 >
                   <option value="" disabled>
                     -- Select Employee --
+                    -- Select First Employee --
                   </option>
                   {employees
                     .filter((e) => e.active)
@@ -1470,6 +1516,29 @@ export default function CalendarView({
                       </option>
                     ))}
                 </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Employee 2 Who Stayed Overtime (Slot 2 - Standard 2nd Person):</label>
+                <select
+                  className="form-select"
+                  value={backfillEmpId2}
+                  onChange={(e) => setBackfillEmpId2(e.target.value)}
+                >
+                  <option value="">
+                    -- None / Only 1 Person Stayed --
+                  </option>
+                  {employees
+                    .filter((e) => e.active && String(e.id) !== String(backfillEmpId1))
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} ({e.experience} · Skill {e.skill}/5)
+                      </option>
+                    ))}
+                </select>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Standard overtime shifts usually have 2 workers. Both employees will be saved with completed status for this date.
+                </p>
               </div>
 
               <div className="modal-footer">
@@ -1484,6 +1553,7 @@ export default function CalendarView({
                   type="submit"
                   className="btn btn-primary"
                   disabled={isSubmittingBackfill || !backfillEmpId}
+                  disabled={isSubmittingBackfill || !backfillEmpId1}
                 >
                   {isSubmittingBackfill ? 'Saving Record...' : 'Save Historical Pickup'}
                 </button>

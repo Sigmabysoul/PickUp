@@ -1236,7 +1236,9 @@ button {
 }
 
 /* Day Boxes (Exact Match to User's Screenshot) */
+/* Day Boxes (Relative positioning ensures crown stays inside date box) */
 .day-box {
+  position: relative;
   aspect-ratio: 1 / 1;
   min-height: 52px;
   max-height: 68px;
@@ -1271,55 +1273,94 @@ button {
 /* COLOR STATES REQUESTED BY USER */
 
 /* 1. Green: Days there was a person doing overtime for pickup */
+/* 1. Super Senior Day: PURPLE */
+.day-status-supersenior {
+  background-color: rgba(168, 85, 247, 0.22);
+  color: #c084fc;
+  border-color: rgba(168, 85, 247, 0.55);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);
+}
+
+[data-theme="light"] .day-status-supersenior {
+  background-color: #f3e8ff;
+  color: #7e22ce;
+  border-color: #d8b4fe;
+}
+
+/* 2. Overtime Stay: GREEN (Aesthetic) */
 .day-status-overtime {
   background-color: rgba(34, 197, 94, 0.2);
   color: #4ade80;
   border-color: rgba(34, 197, 94, 0.4);
+  background-color: rgba(16, 185, 129, 0.22);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.15);
 }
 
 [data-theme="light"] .day-status-overtime {
   background-color: #dcfce7;
   color: #15803d;
   border-color: #bbf7d0;
+  border-color: #86efac;
 }
 
 /* 2. Pickup done before 7pm so no overtime needed (Teal / Sky Blue) */
+/* 3. Pickup done before 7pm: LIGHT BLUE */
 .day-status-before7pm {
   background-color: rgba(14, 165, 233, 0.2);
+  background-color: rgba(56, 189, 248, 0.22);
   color: #38bdf8;
   border-color: rgba(14, 165, 233, 0.4);
+  border-color: rgba(56, 189, 248, 0.45);
 }
 
 [data-theme="light"] .day-status-before7pm {
   background-color: #e0f2fe;
   color: #0369a1;
   border-color: #bae6fd;
+  color: #0284c7;
+  border-color: #7dd3fc;
 }
 
 /* 3. No pickup done (Gray / Muted Slate, like days 8 and 24 in screenshot) */
+/* 4. No pickup done: RED */
 .day-status-nopickup {
   background-color: rgba(148, 163, 184, 0.15);
   color: #94a3b8;
   border-color: rgba(148, 163, 184, 0.3);
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.45);
 }
 
 [data-theme="light"] .day-status-nopickup {
   background-color: #f1f5f9;
   color: #475569;
   border-color: #e2e8f0;
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
 }
 
 /* 4. Holiday / Week Off (Purple / Lavender) */
+/* 5. Holiday / Closed: DARK BLUE */
 .day-status-holiday {
   background-color: rgba(168, 85, 247, 0.18);
   color: #c084fc;
   border-color: rgba(168, 85, 247, 0.4);
+  background-color: rgba(30, 58, 138, 0.45);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.5);
 }
 
 [data-theme="light"] .day-status-holiday {
   background-color: #f3e8ff;
   color: #7e22ce;
   border-color: #e9d5ff;
+  background-color: #dbeafe;
+  color: #1e3a8a;
+  border-color: #93c5fd;
 }
 
 /* 5. Scheduled Crew (Upcoming dates) */
@@ -1336,16 +1377,23 @@ button {
 }
 
 /* Sunday Off (Standard Weekly Day Off) */
+/* 6. Sunday Off (Standard Weekly Day Off): GREY */
 .day-status-sunday {
   background-color: rgba(30, 41, 59, 0.45);
   color: #64748b;
   border-color: rgba(51, 65, 85, 0.35);
+  background-color: rgba(107, 114, 128, 0.2);
+  color: #9ca3af;
+  border-color: rgba(107, 114, 128, 0.35);
 }
 
 [data-theme="light"] .day-status-sunday {
   background-color: #f1f5f9;
   color: #94a3b8;
   border-color: #e2e8f0;
+  background-color: #f3f4f6;
+  color: #4b5563;
+  border-color: #d1d5db;
 }
 
 /* Neutral */
@@ -1415,6 +1463,13 @@ button {
 .dot-holiday { background-color: #a855f7; }
 .dot-scheduled { background-color: #38bdf8; }
 .dot-sunday { background-color: #64748b; }
+.dot-overtime { background-color: #10b981; }
+.dot-supersenior { background-color: #a855f7; }
+.dot-before7pm { background-color: #38bdf8; }
+.dot-nopickup { background-color: #ef4444; }
+.dot-holiday { background-color: #1e40af; }
+.dot-scheduled { background-color: #0284c7; }
+.dot-sunday { background-color: #9ca3af; }
 
 /* Day Details & Outcome Selector */
 .day-details-card {
