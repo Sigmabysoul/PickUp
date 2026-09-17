@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Clock,
   Star,
+  Key,
 } from 'lucide-react';
 
 export default function EmployeeManager({
@@ -66,6 +67,7 @@ export default function EmployeeManager({
       warehouse_id: warehouses[0]?.id || '',
       experience: 'Junior',
       skill: 2,
+      can_hold_key: false,
       active: true,
     });
     setIsEmpModalOpen(true);
@@ -78,6 +80,7 @@ export default function EmployeeManager({
       warehouse_id: emp.warehouse_id,
       experience: emp.experience,
       skill: emp.skill,
+      can_hold_key: Boolean(emp.can_hold_key),
       active: emp.active,
     });
     setIsEmpModalOpen(true);
@@ -244,6 +247,23 @@ export default function EmployeeManager({
                         >
                           {emp.experience === 'Super Senior' ? '👑 Super Senior' : emp.experience}
                         </span>
+                        {emp.can_hold_key && (
+                          <span
+                            className="badge"
+                            style={{
+                              backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                              color: '#facc15',
+                              border: '1px solid rgba(234, 179, 8, 0.35)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              marginLeft: '0.35rem',
+                            }}
+                            title="Authorized Key Holder: Can submit facility keys to Head Office"
+                          >
+                            <Key size={11} /> Key
+                          </span>
+                        )}
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -373,6 +393,21 @@ export default function EmployeeManager({
                         ? '👑 On-Call Emergency Crew'
                         : `🔥 ${emp.completedCount || 0} completed stays`}
                     </span>
+                    {emp.can_hold_key && (
+                      <span
+                        className="badge"
+                        style={{
+                          backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                          color: '#facc15',
+                          border: '1px solid rgba(234, 179, 8, 0.35)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                        }}
+                      >
+                        <Key size={10} /> Key Holder
+                      </span>
+                    )}
                     {isOnLeave && (
                       <span className="mobile-emp-leave-pill" title={`${empAbsences[0].reason} (${empAbsences[0].starts_on} to ${empAbsences[0].ends_on})`}>
                         <CalendarOff size={11} /> On Leave
@@ -582,6 +617,53 @@ export default function EmployeeManager({
                     onChange={(e) => setEmpForm({ ...empForm, skill: parseInt(e.target.value, 10) })}
                   />
                   <span style={{ fontWeight: 700, minWidth: '40px' }}>{empForm.skill} / 5</span>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <Key size={15} color="#eab308" /> Head Office Key Authorization
+                </label>
+                <div
+                  onClick={() => setEmpForm({ ...empForm, can_hold_key: !empForm.can_hold_key })}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.85rem',
+                    padding: '0.85rem 1rem',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    backgroundColor: empForm.can_hold_key ? 'rgba(234, 179, 8, 0.15)' : 'var(--bg-surface-elevated)',
+                    border: empForm.can_hold_key ? '1.5px solid #eab308' : '1px solid var(--border-color)',
+                    transition: 'all 0.18s ease',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '22px',
+                      height: '22px',
+                      borderRadius: '6px',
+                      backgroundColor: empForm.can_hold_key ? '#eab308' : 'transparent',
+                      border: empForm.can_hold_key ? 'none' : '2px solid var(--text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#000',
+                      fontWeight: 'bold',
+                      fontSize: '13px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {empForm.can_hold_key && '✓'}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem', color: empForm.can_hold_key ? '#fef08a' : 'var(--text-primary)' }}>
+                      🔑 Authorized Key Holder
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                      Can lock up and submit facility keys to Head Office after overtime duty. Overtime shifts require at least 1 key holder.
+                    </div>
+                  </div>
                 </div>
               </div>
 

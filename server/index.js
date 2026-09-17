@@ -223,7 +223,7 @@ app.get('/api/bootstrap', async (req, res) => {
       }
     }
     const employeesRes = await pool.query(
-      `SELECT e.id, e.warehouse_id, e.name, e.experience, e.skill, e.initial_completed_count, e.active, e.created_at, w.name as warehouse_name
+      `SELECT e.id, e.warehouse_id, e.name, e.experience, e.skill, e.initial_completed_count, e.can_hold_key, e.active, e.created_at, w.name as warehouse_name
        FROM employees e
        LEFT JOIN warehouses w ON e.warehouse_id = w.id
        WHERE e.archived = false
@@ -239,7 +239,7 @@ app.get('/api/bootstrap', async (req, res) => {
     const assignmentsRes = await pool.query(
       `SELECT a.id, a.employee_id, a.warehouse_id, to_char(a.duty_date, 'YYYY-MM-DD') as duty_date,
               a.status, a.selected_at, a.updated_at, a.replaces_assignment_id,
-              e.name as employee_name, e.experience, e.skill, e.warehouse_id as home_warehouse_id,
+              e.name as employee_name, e.experience, e.skill, e.can_hold_key, e.warehouse_id as home_warehouse_id,
               hw.name as home_warehouse_name, w.name as warehouse_name
        FROM assignments a
        JOIN employees e ON a.employee_id = e.id
@@ -339,7 +339,7 @@ app.patch('/api/warehouses/:id', async (req, res) => {
 // --------------------------------------------------------------------------
 app.post('/api/employees', async (req, res) => {
   try {
-    let { warehouse_id, name, experience, skill, active, initial_completed_count } = req.body;
+    let { warehouse_id, name, experience, skill, active, initial_completed_count, can_hold_key } = req.body;
     if (!name || !experience || skill == null) {
       return res.status(400).json({ error: 'Missing required employee fields (name, experience, skill)' });
     }
@@ -384,9 +384,9 @@ app.post('/api/employees', async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO employees (warehouse_id, name, experience, skill, initial_completed_count, active)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [warehouse_id, name.trim(), experience, Number(skill), Number(initial_completed_count), active ?? true]
+      `INSERT INTO employees (warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [warehouse_id, name.trim(), experience, Number(skill), Number(initial_completed_count), Boolean(can_hold_key), active ?? true]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -397,7 +397,7 @@ app.post('/api/employees', async (req, res) => {
 app.patch('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { warehouse_id, name, experience, skill, active, initial_completed_count } = req.body;
+    const { warehouse_id, name, experience, skill, active, initial_completed_count, can_hold_key } = req.body;
     const fields = [];
     const values = [];
     let idx = 1;
@@ -425,6 +425,10 @@ app.patch('/api/employees/:id', async (req, res) => {
     if (initial_completed_count !== undefined) {
       fields.push(`initial_completed_count = $${idx++}`);
       values.push(Number(initial_completed_count));
+    }
+    if (can_hold_key !== undefined) {
+      fields.push(`can_hold_key = $${idx++}`);
+      values.push(Boolean(can_hold_key));
     }
 
     if (fields.length === 0) {
@@ -540,6 +544,22 @@ app.put('/api/daily-status', async (req, res) => {
        RETURNING id, warehouse_id, to_char(duty_date, 'YYYY-MM-DD') as duty_date, status, notes`,
       [whId, duty_date, status, notes || null]
     );
+
+    // If day outcome is anything other than overtime stay, remove assignments so participant names disappear
+    if (status !== 'overtime_stay') {
+      if (whId) {
+        await pool.query(
+          `DELETE FROM assignments WHERE warehouse_id = $1 AND duty_date = $2`,
+          [whId, duty_date]
+        );
+      } else {
+        await pool.query(
+          `DELETE FROM assignments WHERE duty_date = $1`,
+          [duty_date]
+        );
+      }
+    }
+
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -578,7 +598,7 @@ app.post('/api/generate', async (req, res) => {
     // Fetch all active employees
     const employees = (
       await client.query(
-        `SELECT id, warehouse_id, name, experience, skill, active, archived
+        `SELECT id, warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, active, archived
          FROM employees
          WHERE archived = false AND active = true`
       )
@@ -1144,7 +1164,7 @@ app.post('/api/assignments/report-absence', async (req, res) => {
 
     // 4. Find immediate replacement candidate across BOTH warehouses on this date!
     const employeesRes = await client.query(
-      `SELECT id, warehouse_id, name, experience, skill, active, archived
+      `SELECT id, warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, active, archived
        FROM employees
        WHERE active = true AND archived = false`
     );
@@ -1217,7 +1237,7 @@ app.post('/api/assignments/report-absence', async (req, res) => {
 // 7c. Confirm Today's Overtime Crew
 // --------------------------------------------------------------------------
 app.post('/api/assignments/confirm-today', async (req, res) => {
-  const { duty_date } = req.body;
+  const { duty_date, senior_risk_acknowledged } = req.body;
   if (!duty_date) {
     return res.status(400).json({ error: 'duty_date is required' });
   }
@@ -1226,13 +1246,17 @@ app.post('/api/assignments/confirm-today', async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    const notes = senior_risk_acknowledged
+      ? 'Confirmed by dispatcher (Senior Supervisor acknowledged Head Office key delivery risk)'
+      : 'Confirmed by dispatcher';
+
     // Ensure daily log is set to 'overtime_stay'
     await client.query(
       `INSERT INTO daily_logs (warehouse_id, duty_date, status, notes)
-       VALUES (NULL, $1, 'overtime_stay', 'Confirmed by dispatcher')
+       VALUES (NULL, $1, 'overtime_stay', $2)
        ON CONFLICT (warehouse_id, duty_date)
-       DO UPDATE SET status = 'overtime_stay', notes = 'Confirmed by dispatcher'`,
-      [duty_date]
+       DO UPDATE SET status = 'overtime_stay', notes = $2`,
+      [duty_date, notes]
     );
 
     // Update scheduled assignments for this date to 'completed'
@@ -1244,26 +1268,29 @@ app.post('/api/assignments/confirm-today', async (req, res) => {
 
     // Fetch confirmed assignments
     const confirmed = await client.query(
-      `SELECT a.*, e.name as employee_name, e.warehouse_id as home_warehouse_id,
+      `SELECT a.*, e.name as employee_name, e.can_hold_key, e.warehouse_id as home_warehouse_id,
               hw.name as home_warehouse_name, w.name as warehouse_name
        FROM assignments a
        JOIN employees e ON a.employee_id = e.id
        JOIN warehouses w ON a.warehouse_id = w.id
        LEFT JOIN warehouses hw ON e.warehouse_id = hw.id
-       WHERE a.duty_date = $1 AND a.status != 'absent'`,
+       WHERE a.duty_date = $1
+       ORDER BY w.name, e.name`,
       [duty_date]
     );
 
     await client.query('COMMIT');
-
     res.json({
       success: true,
       duty_date,
+      confirmed_count: confirmed.rowCount,
+      updatedCount: confirmed.rowCount,
       confirmed_workers: confirmed.rows,
-      message: 'Overtime crew confirmed for today.',
+      assignments: confirmed.rows,
     });
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error('Error confirming today assignments:', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

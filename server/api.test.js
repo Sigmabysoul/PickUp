@@ -449,4 +449,100 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     const superSenior = testEmployees.find((e) => e.experience === 'Super Senior');
     assert.ok(!data.assignments.some((a) => a.employee_id === superSenior.id));
   });
+
+  await t.test('POST /api/employees saves can_hold_key flag and GET /api/bootstrap returns it', async () => {
+    const res = await apiFetch(`${baseUrl}/api/employees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        warehouse_id: testWarehouses[0].id,
+        name: '__Test_Key_Holder',
+        experience: 'Mid',
+        skill: 3,
+        can_hold_key: true,
+      }),
+    });
+    assert.equal(res.status, 201);
+    const data = await res.json();
+    assert.equal(data.can_hold_key, true);
+
+    const bootRes = await apiFetch(`${baseUrl}/api/bootstrap`);
+    const bootData = await bootRes.json();
+    const found = bootData.employees.find((e) => e.name === '__Test_Key_Holder');
+    assert.ok(found);
+    assert.equal(found.can_hold_key, true);
+  });
+
+  await t.test('PUT /api/daily-status with non-overtime status clears assignments for that date', async () => {
+    const testDate = '2026-09-25';
+    // First schedule a test assignment
+    await pool.query(
+      `INSERT INTO assignments (duty_date, employee_id, warehouse_id, status)
+       VALUES ($1, $2, $3, 'scheduled')
+       ON CONFLICT (employee_id, duty_date) DO UPDATE SET status = 'scheduled'`,
+      [testDate, testEmployees[0].id, testWarehouses[0].id]
+    );
+
+    const countBefore = await pool.query(
+      `SELECT COUNT(*) FROM assignments WHERE duty_date = $1`,
+      [testDate]
+    );
+    assert.ok(Number(countBefore.rows[0].count) >= 1);
+
+    // Set day status to no_pickup
+    const statusRes = await apiFetch(`${baseUrl}/api/daily-status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        warehouse_id: testWarehouses[0].id,
+        duty_date: testDate,
+        status: 'no_pickup',
+      }),
+    });
+    assert.equal(statusRes.status, 200);
+
+    const countAfter = await pool.query(
+      `SELECT COUNT(*) FROM assignments WHERE duty_date = $1`,
+      [testDate]
+    );
+    assert.equal(Number(countAfter.rows[0].count), 0, 'Assignments must be deleted when status is not overtime_stay');
+  });
+
+  await t.test('POST /api/assignments/confirm-today records senior risk override if acknowledged', async () => {
+    const testDate = '2026-09-27';
+    // Create 2 scheduled assignments
+    await pool.query(
+      `INSERT INTO assignments (duty_date, employee_id, warehouse_id, status)
+       VALUES ($1, $2, $3, 'scheduled')
+       ON CONFLICT (employee_id, duty_date) DO UPDATE SET status = 'scheduled'`,
+      [testDate, testEmployees[0].id, testWarehouses[0].id]
+    );
+    await pool.query(
+      `INSERT INTO assignments (duty_date, employee_id, warehouse_id, status)
+       VALUES ($1, $2, $3, 'scheduled')
+       ON CONFLICT (employee_id, duty_date) DO UPDATE SET status = 'scheduled'`,
+      [testDate, testEmployees[1].id, testWarehouses[0].id]
+    );
+
+    const confirmRes = await apiFetch(`${baseUrl}/api/assignments/confirm-today`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        duty_date: testDate,
+        senior_risk_acknowledged: true,
+      }),
+    });
+    assert.equal(confirmRes.status, 200);
+    const data = await confirmRes.json();
+    assert.equal(data.success, true);
+    assert.equal(data.updatedCount, 2);
+
+    // Check daily_logs notes
+    const logRes = await pool.query(
+      `SELECT notes FROM daily_logs WHERE duty_date = $1 AND status = 'overtime_stay'`,
+      [testDate]
+    );
+    assert.ok(logRes.rows.length > 0);
+    assert.ok(logRes.rows[0].notes.includes('Senior Supervisor acknowledged risk'));
+  });
 });

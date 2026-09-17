@@ -246,3 +246,46 @@ test('Fairness Pacing: Returning/new hire with initial completed baseline is not
   );
 });
 
+test('Key Holder Rule: Algorithm always pairs at least 1 key holder when available', () => {
+  const employees = [
+    { id: 1, name: 'NonKey 1', experience: 'Junior', skill: 2, can_hold_key: false },
+    { id: 2, name: 'NonKey 2', experience: 'Mid', skill: 3, can_hold_key: false },
+    { id: 3, name: 'Key Holder 1', experience: 'Senior', skill: 4, can_hold_key: true },
+  ];
+
+  const result = selectOvertimeCrew({
+    dutyDate: '2026-09-16',
+    warehouseId: null,
+    employees,
+    pastAssignments: [],
+    requiredCount: 2,
+  });
+
+  assert.equal(result.selected.length, 2);
+  const keyHolderCount = result.selected.filter((e) => e.can_hold_key).length;
+  assert.ok(keyHolderCount >= 1, 'At least 1 selected employee must be a key holder');
+  assert.equal(result.noKeyHolderAvailable, false);
+});
+
+test('Key Holder Rule: Emits senior risk warning when all key holders are unavailable', () => {
+  const employees = [
+    { id: 1, name: 'NonKey 1', experience: 'Junior', skill: 2, can_hold_key: false },
+    { id: 2, name: 'NonKey 2', experience: 'Mid', skill: 3, can_hold_key: false },
+  ];
+
+  const result = selectOvertimeCrew({
+    dutyDate: '2026-09-16',
+    warehouseId: null,
+    employees,
+    pastAssignments: [],
+    requiredCount: 2,
+  });
+
+  assert.equal(result.selected.length, 2);
+  assert.equal(result.noKeyHolderAvailable, true);
+  assert.ok(
+    result.warnings.some((w) => w.includes('No Key Holder Available')),
+    'Must warn senior that no key holder is available'
+  );
+});
+

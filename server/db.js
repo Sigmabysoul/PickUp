@@ -52,8 +52,10 @@ CREATE TABLE IF NOT EXISTS employees (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     warehouse_id BIGINT NOT NULL REFERENCES warehouses(id),
     name TEXT NOT NULL,
-    experience TEXT NOT NULL CHECK (experience IN ('Junior', 'Mid', 'Senior')),
+    experience TEXT NOT NULL CHECK (experience IN ('Junior', 'Mid', 'Senior', 'Super Senior')),
     skill SMALLINT NOT NULL CHECK (skill >= 1 AND skill <= 5),
+    initial_completed_count INTEGER DEFAULT 0 NOT NULL,
+    can_hold_key BOOLEAN DEFAULT FALSE NOT NULL,
     active BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     archived BOOLEAN DEFAULT FALSE NOT NULL
@@ -147,6 +149,7 @@ export async function initDb() {
       ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_experience_check;
       ALTER TABLE employees ADD CONSTRAINT employees_experience_check CHECK (experience IN ('Junior', 'Mid', 'Senior', 'Super Senior'));
       ALTER TABLE employees ADD COLUMN IF NOT EXISTS initial_completed_count INTEGER DEFAULT 0 NOT NULL;
+      ALTER TABLE employees ADD COLUMN IF NOT EXISTS can_hold_key BOOLEAN DEFAULT FALSE NOT NULL;
       UPDATE warehouses SET active = (name = 'Main Warehouse');
     `);
   } catch (err) {

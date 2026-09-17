@@ -312,11 +312,11 @@ function MainApp() {
     return json;
   };
 
-  const handleConfirmToday = async (duty_date) => {
+  const handleConfirmToday = async (duty_date, senior_risk_acknowledged = false) => {
     const res = await authFetch('/api/assignments/confirm-today', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ duty_date }),
+      body: JSON.stringify({ duty_date, senior_risk_acknowledged }),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || 'Failed to confirm today');

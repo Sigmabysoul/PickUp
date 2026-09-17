@@ -19,6 +19,8 @@ import {
   Plus,
   Trash2,
   AlertCircle,
+  Key,
+  RotateCw,
 } from 'lucide-react';
 
 export default function CalendarView({
@@ -64,6 +66,7 @@ export default function CalendarView({
 
   // Loading & Feedback states
   const [isConfirmingToday, setIsConfirmingToday] = useState(false);
+  const [seniorRiskAcknowledged, setSeniorRiskAcknowledged] = useState(false);
   const [mobileTab, setMobileTab] = useState('today'); // 'today' | 'calendar'
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -169,6 +172,20 @@ export default function CalendarView({
 
   // Selected date's assignments (single warehouse)
   const selectedAssignments = assignments.filter((a) => a.duty_date === selectedDateStr);
+  const activeSelectedWorkers = selectedAssignments.filter((a) => a.status !== 'absent');
+  const hasAbsentWorker = selectedAssignments.some((a) => a.status === 'absent');
+  const allTodayConfirmed =
+    activeSelectedWorkers.length >= 2 &&
+    activeSelectedWorkers.every((a) => a.status === 'completed');
+
+  const keyHolderNames = activeSelectedWorkers
+    .filter((a) => {
+      if (a.can_hold_key) return true;
+      const emp = employees.find((e) => String(e.id) === String(a.employee_id));
+      return Boolean(emp?.can_hold_key);
+    })
+    .map((a) => a.employee_name);
+  const hasKeyHolderCoverage = keyHolderNames.length > 0;
 
   // Emergency Sunday status
   const isEmergencySundayActive =
@@ -204,11 +221,11 @@ export default function CalendarView({
     showToast('Auto-selected fair overtime crew.');
   };
 
-  const handleConfirmTodayClick = async () => {
+  const handleConfirmTodayClick = async (riskAcknowledged = false) => {
     if (!onConfirmToday) return;
     try {
       setIsConfirmingToday(true);
-      await onConfirmToday(selectedDateStr);
+      await onConfirmToday(selectedDateStr, riskAcknowledged);
       showToast('Confirmed! Both employees are recorded as staying overtime today.');
     } catch (err) {
       alert(err.message);
@@ -333,12 +350,6 @@ export default function CalendarView({
       alert(err.message);
     }
   };
-
-  // Compute active today crew for the command banner
-  const activeTodayWorkers = selectedAssignments.filter((a) => a.status !== 'absent');
-  const allTodayConfirmed =
-    activeTodayWorkers.length >= 2 &&
-    activeTodayWorkers.every((a) => a.status === 'completed');
 
   return (
     <div className="calendar-view-container">
@@ -645,7 +656,7 @@ export default function CalendarView({
                 onClick={() => handleSetDayOutcome('overtime_stay')}
                 title="Truck arrived after hours; 1 person stayed overtime"
               >
-                <CheckCircle2 size={14} /> Overtime Stay
+                <CheckCircle2 size={14} /> OverTime Stay
               </button>
               <button
                 type="button"
@@ -661,7 +672,7 @@ export default function CalendarView({
                 onClick={() => handleSetDayOutcome('no_pickup')}
                 title="No delivery arrived; no pickup done"
               >
-                <XCircle size={14} /> No Pickup Done
+                <XCircle size={14} /> No Pickup
               </button>
               <button
                 type="button"
@@ -669,7 +680,7 @@ export default function CalendarView({
                 onClick={() => handleSetDayOutcome('holiday')}
                 title="Entire warehouse was closed for holiday"
               >
-                <Coffee size={14} /> Warehouse Holiday
+                <Coffee size={14} /> Holiday
               </button>
             </div>
           </div>
@@ -762,94 +773,6 @@ export default function CalendarView({
           )}
 
           {/* =========================================================================
-              TODAY'S SPECIAL DISPATCH COMMAND CARD (CONFIRMATION & SWAP ACTIONS)
-              ========================================================================= */}
-          {/* =========================================================================
-              TODAY'S SPECIAL DISPATCH COMMAND CARD (CONFIRMATION & SUPER SENIOR ACTIONS)
-              ========================================================================= */}
-          {isToday && (!isSelectedSunday || isEmergencySundayActive) && (
-            <div className="today-action-card">
-              <div className="today-action-header">
-                <div>
-                  <h4 style={{ fontWeight: 800, fontSize: '1.05rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                    <span className="legend-dot dot-overtime" style={{ animation: 'liveBeacon 1.8s infinite', boxShadow: '0 0 10px #22c55e', width: '10px', height: '10px' }} />
-                    <Sparkles size={18} color="var(--accent-blue)" />
-                    Today's Overtime Crew (2 Workers Standard)
-                  </h4>
-                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.2rem', marginBottom: 0 }}>
-                    Deterministic round-robin rotation ensures fair rest and evenly balanced overtime shifts.
-                  </p>
-                  {hasSuperSeniorOnDate(todayStr) && (
-                    <div style={{ marginTop: '0.4rem' }}>
-                      <span className="badge badge-super-senior" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        👑 Emergency Super Senior Active on Today's Duty
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
-                  {/* Emergency Super Senior Button */}
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleOpenSuperSeniorModal(selectedDateStr)}
-                    style={{
-                      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.2))',
-                      border: '1px solid rgba(245, 158, 11, 0.5)',
-                      color: '#fbbf24',
-                      fontWeight: 800,
-                      fontSize: '0.85rem',
-                      padding: '0.55rem 0.95rem',
-                      borderRadius: 'var(--radius-sm)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.45rem',
-                      boxShadow: '0 2px 10px rgba(245, 158, 11, 0.18)',
-                    }}
-                    title="Assign an on-call Super Senior for emergency big shipments"
-                  >
-                    <span>👑</span>
-                    <span>Emergency Super Senior</span>
-                  </button>
-
-                  {/* Prominent Confirm Button */}
-                  {allTodayConfirmed ? (
-                    <div className="today-confirmed-badge" style={{ backgroundColor: 'rgba(34, 197, 94, 0.2)', border: '1px solid var(--accent-green)', padding: '0.65rem 1.15rem', borderRadius: 'var(--radius-md)', fontWeight: 800, color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 0 15px rgba(34, 197, 94, 0.3)' }}>
-                      <CheckCircle2 size={18} /> Both Confirmed Staying Overtime Today
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="today-confirm-btn"
-                      onClick={handleConfirmTodayClick}
-                      disabled={isConfirmingToday || activeTodayWorkers.length === 0}
-                      title="Confirm that these two employees will really stay overtime today"
-                      style={{
-                        background: 'linear-gradient(135deg, #16a34a 0%, #22c55e 100%)',
-                        color: '#ffffff',
-                        fontWeight: 800,
-                        fontSize: '0.96rem',
-                        padding: '0.75rem 1.35rem',
-                        borderRadius: 'var(--radius-md)',
-                        boxShadow: '0 4px 18px rgba(34, 197, 94, 0.45)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.6rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                      }}
-                    >
-                      <CheckCircle2 size={19} />
-                      {isConfirmingToday ? 'Confirming...' : 'Confirm Those 2 Will Really Stay Today'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* =========================================================================
               PAST DAYS: CLEAN FACT VIEW WITH MANUAL BACKFILL ENTRIES
               ========================================================================= */}
           {isPastDate ? (
@@ -933,9 +856,30 @@ export default function CalendarView({
             </div>
           ) : (
             /* =========================================================================
-                TODAY OR FUTURE: SINGLE FACILITY OVERTIME STAFFING CARD
+                TODAY OR FUTURE: OVERTIME STAFFING OR NON-OVERTIME CLEARING
                 ========================================================================= */
-            (!isSelectedSunday || isEmergencySundayActive) && (
+            (selectedStatus.type === 'no_pickup' ||
+              selectedStatus.type === 'before_7pm' ||
+              selectedStatus.type === 'holiday' ||
+              (selectedStatus.type === 'sunday_off' && !isEmergencySundayActive)) ? (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '2rem 1rem',
+                  backgroundColor: 'var(--bg-surface-elevated)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px dashed var(--border-color)',
+                  marginTop: '0.5rem',
+                }}
+              >
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', marginBottom: '0.35rem' }}>
+                  No overtime stay required for this date (marked as <strong>{selectedStatus.type.replace('_', ' ')}</strong>).
+                </p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: 0 }}>
+                  Participant crew is cleared. To schedule overtime workers, select "Overtime Stay Required" above.
+                </p>
+              </div>
+            ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div
                   style={{
@@ -945,7 +889,7 @@ export default function CalendarView({
                     border: '1px solid var(--border-color)',
                   }}
                 >
-                  {/* Warehouse Header */}
+                  {/* Card Header with Small Generate / Rerun Rotation Button */}
                   <div
                     style={{
                       display: 'flex',
@@ -966,7 +910,43 @@ export default function CalendarView({
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {/* Small Generate / Rerun Rotation Button at Top */}
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        style={{
+                          fontSize: '0.78rem',
+                          padding: '0.28rem 0.65rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          fontWeight: 700,
+                        }}
+                        onClick={() => handleQuickAutoSelect()}
+                        title={
+                          hasAbsentWorker
+                            ? 'Participant absent: click to rerun rotation and select fair replacement'
+                            : selectedAssignments.length > 0
+                            ? 'Rerun fair rotation algorithm'
+                            : 'Auto-select fair overtime crew (2 workers)'
+                        }
+                      >
+                        {hasAbsentWorker ? (
+                          <>
+                            <RotateCw size={13} /> <span>🔄 Rerun Rotation</span>
+                          </>
+                        ) : selectedAssignments.length > 0 ? (
+                          <>
+                            <RotateCw size={13} /> <span>🔄 Rerun</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={13} /> <span>Generate Crew</span>
+                          </>
+                        )}
+                      </button>
+
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
@@ -977,18 +957,57 @@ export default function CalendarView({
                           color: '#fbbf24',
                           fontWeight: 700,
                           fontSize: '0.78rem',
-                          padding: '0.25rem 0.65rem',
+                          padding: '0.28rem 0.65rem',
                         }}
                         title="Dispatch on-call Super Senior for emergency big shipments"
                       >
-                        👑 Emergency Super Senior
+                        👑 Super Senior
                       </button>
-
-                      <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                        Standard: <strong>2 workers</strong>
-                      </div>
                     </div>
                   </div>
+
+                  {/* Head Office Key Coverage Status Banner */}
+                  {activeSelectedWorkers.length > 0 && (
+                    <div
+                      style={{
+                        marginBottom: '0.9rem',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: 'var(--radius-sm)',
+                        backgroundColor: hasKeyHolderCoverage
+                          ? 'rgba(16, 185, 129, 0.1)'
+                          : 'rgba(239, 68, 68, 0.12)',
+                        border: `1px solid ${
+                          hasKeyHolderCoverage ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.4)'
+                        }`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.55rem',
+                        fontSize: '0.84rem',
+                      }}
+                    >
+                      <Key
+                        size={16}
+                        color={hasKeyHolderCoverage ? 'var(--accent-green, #10b981)' : 'var(--accent-red, #ef4444)'}
+                        style={{ flexShrink: 0 }}
+                      />
+                      {hasKeyHolderCoverage ? (
+                        <div>
+                          <strong>Head Office Key Covered:</strong>{' '}
+                          <span style={{ color: 'var(--accent-green, #10b981)', fontWeight: 700 }}>
+                            {keyHolderNames.join(', ')}
+                          </span>{' '}
+                          is authorized to deliver keys to Head Office.
+                        </div>
+                      ) : (
+                        <div>
+                          <strong style={{ color: 'var(--accent-red, #ef4444)' }}>
+                            ⚠️ Missing Key Holder:
+                          </strong>{' '}
+                          Neither worker has key option. Senior supervisor must acknowledge personal key delivery risk below to confirm.
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Workers Assigned / Scheduled */}
                   <div>
@@ -998,6 +1017,7 @@ export default function CalendarView({
                           No overtime workers selected yet for this date.
                         </p>
                         <button
+                          type="button"
                           className="btn btn-primary btn-sm"
                           onClick={() => handleQuickAutoSelect()}
                         >
@@ -1010,6 +1030,8 @@ export default function CalendarView({
                         const isAbsent = a.status === 'absent';
                         const isScheduled = a.status === 'scheduled';
                         const isSuperSenior = a.experience === 'Super Senior';
+                        const empRecord = employees.find((e) => String(e.id) === String(a.employee_id));
+                        const isKeyHolder = Boolean(a.can_hold_key || empRecord?.can_hold_key);
 
                         return (
                           <div
@@ -1051,6 +1073,23 @@ export default function CalendarView({
                                   <span className="badge" style={{ background: 'var(--bg-surface-elevated)' }}>
                                     Skill: {a.skill}/5
                                   </span>
+                                  {isKeyHolder && (
+                                    <span
+                                      className="badge"
+                                      style={{
+                                        background: 'rgba(245, 158, 11, 0.15)',
+                                        border: '1px solid rgba(245, 158, 11, 0.4)',
+                                        color: '#f59e0b',
+                                        fontWeight: 700,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.25rem',
+                                        fontSize: '0.72rem',
+                                      }}
+                                    >
+                                      <Key size={11} /> 🔑 Key Holder
+                                    </span>
+                                  )}
                                   {isSuperSenior && (
                                     <span className="badge badge-mid" style={{ fontSize: '0.72rem' }}>
                                       Big Shipment Crew
@@ -1096,7 +1135,7 @@ export default function CalendarView({
                               <span>
                                 {isSuperSenior
                                   ? 'Super Senior on-duty for emergency big shipment (excluded from regular algorithm)'
-                                  : 'Deterministic fair rotation: next in cohort with lowest prior completed turns & anti-consecutive rest'}
+                                  : 'Deterministic fair rotation: lowest completed count, anti-consecutive rest & key coverage'}
                               </span>
                             </div>
 
@@ -1115,50 +1154,32 @@ export default function CalendarView({
                                 }}
                               >
                                 <AlertTriangle size={12} />
-                                <span>Priority queued for makeup duty on their next present day!</span>
+                                <span>Priority queued for makeup duty on next present day. Click "🔄 Rerun Rotation" above to select replacement!</span>
                               </div>
                             )}
 
-                            {/* Actions */}
+                            {/* Actions: ONLY Mark Absent / Unable (NO separate confirm stay button per employee) */}
                             {!isAbsent && (
-                              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
-                                {!isStayed && (
+                              <div style={{ marginTop: '0.75rem' }}>
+                                {!isSuperSenior ? (
                                   <button
-                                    className="btn btn-success btn-sm"
-                                    style={{ flex: 1 }}
-                                    onClick={() => onUpdateStatus(a.id, 'completed')}
-                                  >
-                                    <UserCheck size={14} /> Confirm Stayed
-                                  </button>
-                                )}
-
-                                {!isSuperSenior && (
-                                  <button
+                                    type="button"
                                     className="btn btn-danger btn-sm"
-                                    style={{ flex: 1 }}
+                                    style={{ width: '100%', justifyContent: 'center', gap: '0.4rem' }}
                                     onClick={() => handleOpenAbsenceModal(a)}
-                                    title="Employee is absent today. Click to log sick/custom reason and auto-select replacement!"
+                                    title="Employee is absent or unable today. Click to log reason and auto-select replacement!"
                                   >
-                                    <UserX size={14} /> Mark Absent / Sick
+                                    <UserX size={14} /> Mark Absent / Unable
                                   </button>
-                                )}
-
-                                {isSuperSenior && (
+                                ) : (
                                   <button
+                                    type="button"
                                     className="btn btn-secondary btn-sm"
+                                    style={{ width: '100%', justifyContent: 'center', gap: '0.4rem' }}
                                     onClick={() => handleOpenSuperSeniorModal(selectedDateStr)}
                                     title="Adjust crew mode or remove Super Senior"
                                   >
-                                    👑 Adjust / Remove
-                                  </button>
-                                )}
-
-                                {isStayed && (
-                                  <button
-                                    className="btn btn-secondary btn-sm"
-                                    onClick={() => onUpdateStatus(a.id, 'scheduled')}
-                                  >
-                                    Revert
+                                    👑 Adjust / Remove Super Senior
                                   </button>
                                 )}
                               </div>
@@ -1168,22 +1189,107 @@ export default function CalendarView({
                       })
                     )}
                   </div>
+
+                  {/* Bottom: Confirm Those 2 Will Really Stay Today Button */}
+                  {activeSelectedWorkers.length >= 2 && (
+                    allTodayConfirmed ? (
+                      <div
+                        style={{
+                          marginTop: '1.25rem',
+                          padding: '0.85rem 1rem',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                          border: '1px solid rgba(16, 185, 129, 0.4)',
+                          textAlign: 'center',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.5rem',
+                        }}
+                      >
+                        <CheckCircle2 size={18} color="#10b981" />
+                        <span style={{ fontWeight: 700, color: '#10b981', fontSize: '0.92rem' }}>
+                          ✓ Overtime stay confirmed for today! Both employees verified.
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Senior Risk Acknowledgment when no key holder is available */}
+                        {!hasKeyHolderCoverage && (
+                          <div
+                            style={{
+                              marginTop: '1rem',
+                              padding: '0.85rem 1rem',
+                              borderRadius: 'var(--radius-sm)',
+                              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
+                              <AlertTriangle size={18} color="var(--accent-red)" style={{ marginTop: '2px', flexShrink: 0 }} />
+                              <div style={{ fontSize: '0.84rem' }}>
+                                <strong style={{ color: 'var(--accent-red)' }}>Senior Supervisor Key Delivery Liability:</strong>
+                                <p style={{ margin: '0.35rem 0 0.6rem 0', color: 'var(--text-secondary)' }}>
+                                  Neither selected employee has Head Office key submission authority. If you confirm this crew, you (Senior Supervisor) assume full personal responsibility to deliver the facility keys yourself if they fail to do so.
+                                </p>
+                                <label
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    color: 'var(--text-primary)',
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={seniorRiskAcknowledged}
+                                    onChange={(e) => setSeniorRiskAcknowledged(e.target.checked)}
+                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                  />
+                                  <span>I accept personal responsibility to deliver keys to Head Office</span>
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ marginTop: '1rem' }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={isConfirmingToday || (!hasKeyHolderCoverage && !seniorRiskAcknowledged)}
+                            onClick={() => handleConfirmTodayClick(seniorRiskAcknowledged)}
+                            style={{
+                              width: '100%',
+                              padding: '0.8rem 1.25rem',
+                              fontSize: '0.95rem',
+                              fontWeight: 800,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.6rem',
+                              boxShadow: '0 4px 14px rgba(56, 189, 248, 0.25)',
+                              opacity: (!hasKeyHolderCoverage && !seniorRiskAcknowledged) ? 0.6 : 1,
+                              cursor: (!hasKeyHolderCoverage && !seniorRiskAcknowledged) ? 'not-allowed' : 'pointer',
+                            }}
+                            title={
+                              !hasKeyHolderCoverage && !seniorRiskAcknowledged
+                                ? 'Acknowledge key delivery liability above to confirm without a key holder'
+                                : 'Confirm that these 2 employees will really stay overtime today'
+                            }
+                          >
+                            <UserCheck size={18} />
+                            <span>{isConfirmingToday ? 'Confirming Overtime Stay...' : '✓ Confirm Those 2 Will Really Stay Today'}</span>
+                          </button>
+                        </div>
+                      </>
+                    )
+                  )}
                 </div>
               </div>
             )
-          )}
-
-          {/* One-Click Today Sync */}
-          {isToday && (!isSelectedSunday || isEmergencySundayActive) && (
-            <div style={{ marginTop: '1.25rem', textAlign: 'center' }}>
-              <button
-                className="btn btn-primary"
-                style={{ width: '100%', padding: '0.65rem 1rem', fontSize: '0.92rem' }}
-                onClick={() => handleQuickAutoSelect()}
-              >
-                <Sparkles size={16} /> Auto-Generate Fair Pickup Crew (2 Workers)
-              </button>
-            </div>
           )}
 
           {/* Mobile Switch Footer Button */}

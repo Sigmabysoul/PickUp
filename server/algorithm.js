@@ -82,8 +82,11 @@ export function computeEmployeeMetrics(emp, pastAssignments = [], targetDutyDate
     selectionReason = `${effectiveCompletedCount} stays · Waited ${daysSinceLastCompleted} days since last stay (${lastCompletedDate})`;
   }
 
+  const can_hold_key = Boolean(emp.can_hold_key);
+
   return {
     ...emp,
+    can_hold_key,
     completedCount,
     initialCompletedCount,
     effectiveCompletedCount,
@@ -143,6 +146,15 @@ function scoreCandidateSet(selectedSet, candidateSlice, targetDate) {
   // Rule 1: Avoid assigning two high-rank/smart employees together
   if (highSkillCount > 1) {
     score -= 3000 * (highSkillCount - 1);
+  }
+
+  // Key Holder Rule: At least 1 staying employee must have key submission authority for Head Office
+  const hasKeyHolder = selectedSet.some((e) => e.can_hold_key);
+  if (hasKeyHolder) {
+    score += 1500;
+  } else {
+    // Heavily penalize pairing candidates where neither has key authority
+    score -= 25000;
   }
 
   // Rule 1: Prefer pairing one skilled with one junior when possible
@@ -228,7 +240,14 @@ export function selectOvertimeCrew({
         `Assigned ${highSkillCount} high-skill workers together due to small candidate pool.`
       );
     }
-    return { selected: enriched, warnings };
+    const hasKey = enriched.some((e) => e.can_hold_key);
+    const noKeyHolderAvailable = !hasKey;
+    if (noKeyHolderAvailable) {
+      warnings.push(
+        '⚠️ No Key Holder Available: None of the present rested employees have Head Office key authority. Senior Supervisor risk authorization required.'
+      );
+    }
+    return { selected: enriched, warnings, noKeyHolderAvailable };
   }
 
   // 3. Anti-consecutive rest filter:
@@ -242,7 +261,17 @@ export function selectOvertimeCrew({
     warnings.push('Some employees may work consecutive shifts due to limited rested staff available today.');
   }
 
-  // 4. Group candidates by effectiveCompletedCount to enforce Rule 2 (Fairness Cohorts)
+  // 4. Key Holder check on available candidate pool
+  const keyHoldersInPool = poolToUse.filter((e) => e.can_hold_key);
+  let noKeyHolderAvailable = false;
+  if (keyHoldersInPool.length === 0) {
+    noKeyHolderAvailable = true;
+    warnings.push(
+      '⚠️ No Key Holder Available: None of the present rested employees have Head Office key authority. Senior Supervisor risk authorization required.'
+    );
+  }
+
+  // 5. Group candidates by effectiveCompletedCount to enforce Rule 2 (Fairness Cohorts)
   const cohortsMap = new Map();
   for (const emp of poolToUse) {
     const count = emp.effectiveCompletedCount;
@@ -287,6 +316,36 @@ export function selectOvertimeCrew({
     }
   }
 
+  // Guarantee Key Holder Coverage if key holders are available in the candidate pool
+  if (keyHoldersInPool.length > 0 && selected.length > 0 && !selected.some((e) => e.can_hold_key)) {
+    // Find the best key holder candidate in poolToUse
+    const keyCandidates = [...keyHoldersInPool].sort((a, b) => {
+      if (a.effectiveCompletedCount !== b.effectiveCompletedCount) {
+        return a.effectiveCompletedCount - b.effectiveCompletedCount;
+      }
+      return (b.daysSinceLastCompleted || 0) - (a.daysSinceLastCompleted || 0);
+    });
+
+    const bestKeyHolder = keyCandidates[0];
+    if (bestKeyHolder) {
+      // Replace the least optimal non-key candidate in selected
+      let replaceIdx = selected.length - 1;
+      let worstScore = -Infinity;
+      for (let i = 0; i < selected.length; i++) {
+        const emp = selected[i];
+        const val = emp.effectiveCompletedCount * 1000 - (emp.daysSinceLastCompleted || 0);
+        if (val > worstScore) {
+          worstScore = val;
+          replaceIdx = i;
+        }
+      }
+      selected[replaceIdx] = bestKeyHolder;
+      warnings.push(
+        `Selected ${bestKeyHolder.name} (authorized key holder) to ensure mandatory Head Office key submission coverage.`
+      );
+    }
+  }
+
   // Final sanity checks & warnings
   const selectedHighSkill = selected.filter((e) => e.isHighSkill).length;
   if (selectedHighSkill > 1) {
@@ -295,5 +354,5 @@ export function selectOvertimeCrew({
     );
   }
 
-  return { selected, warnings };
+  return { selected, warnings, noKeyHolderAvailable };
 }
