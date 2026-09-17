@@ -20,7 +20,100 @@ import WarehouseManager from './components/WarehouseManager.jsx';
 import FairnessAnalytics from './components/FairnessAnalytics.jsx';
 import AuthLockScreen from './components/AuthLockScreen.jsx';
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('PickUp UI Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '2rem',
+            backgroundColor: 'var(--bg-app, #030712)',
+            color: 'var(--text-primary, #f8fafc)',
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              maxWidth: '460px',
+              width: '100%',
+              backgroundColor: 'var(--bg-surface, #0f172a)',
+              padding: '2rem',
+              borderRadius: '1rem',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>⚠️</div>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '0.5rem', color: '#f87171' }}>
+              Display Render Notice
+            </h2>
+            <p
+              style={{
+                fontSize: '0.85rem',
+                color: 'var(--text-secondary, #94a3b8)',
+                marginBottom: '1.25rem',
+                lineHeight: 1.5,
+              }}
+            >
+              {this.state.error?.message || 'A visual display error occurred while rendering the page.'}
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => window.location.reload()}
+                style={{ padding: '0.6rem 1.25rem', fontWeight: 700 }}
+              >
+                Reload Page
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  localStorage.removeItem('pickup_auth_token');
+                  localStorage.removeItem('pickup_auth_user');
+                  sessionStorage.clear();
+                  window.location.reload();
+                }}
+                style={{ padding: '0.6rem 1.25rem' }}
+              >
+                Reset Session
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <MainApp />
+    </ErrorBoundary>
+  );
+}
+
+function MainApp() {
   const [activeTab, setActiveTab] = useState('calendar');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

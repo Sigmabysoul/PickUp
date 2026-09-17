@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   UserCheck,
   UserX,
+  Users,
   Building2,
   Coffee,
   Sparkles,
