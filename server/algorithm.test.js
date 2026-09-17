@@ -194,14 +194,15 @@ test('Anti-Consecutive Rest Rule: Worker who worked yesterday is rested if other
   );
 });
 
-test('Fairness Pacing: Returning/new hire with initial completed baseline is not scheduled every consecutive day', () => {
+test('Fairness Pacing: Worker who did a pickup recently is not scheduled back-to-back', () => {
   const employees = [
-    { id: 1, name: 'Veteran 1', experience: 'Senior', skill: 4, warehouse_id: 1, initial_completed_count: 0 },
-    { id: 2, name: 'Veteran 2', experience: 'Junior', skill: 2, warehouse_id: 1, initial_completed_count: 0 },
-    { id: 3, name: 'New Hire', experience: 'Junior', skill: 1, warehouse_id: 1, initial_completed_count: 5 },
+    { id: 1, name: 'Veteran 1', experience: 'Senior', skill: 4, warehouse_id: 1 },
+    { id: 2, name: 'Veteran 2', experience: 'Junior', skill: 2, warehouse_id: 1 },
+    { id: 3, name: 'New Hire', experience: 'Junior', skill: 1, warehouse_id: 1 },
+    { id: 4, name: 'Extra Worker', experience: 'Mid', skill: 3, warehouse_id: 1 },
   ];
 
-  // Veterans completed 5 duties each
+  // Veterans completed 5 duties each; New Hire & Extra Worker join with 0 actual completions
   const pastAssignments = [
     { employee_id: 1, duty_date: '2026-09-01', status: 'completed' },
     { employee_id: 1, duty_date: '2026-09-04', status: 'completed' },
@@ -213,9 +214,11 @@ test('Fairness Pacing: Returning/new hire with initial completed baseline is not
     { employee_id: 2, duty_date: '2026-09-08', status: 'completed' },
     { employee_id: 2, duty_date: '2026-09-11', status: 'completed' },
     { employee_id: 2, duty_date: '2026-09-14', status: 'completed' },
+    // Extra Worker has a recent pickup but not yesterday relative to Sep 15
+    { employee_id: 4, duty_date: '2026-09-12', status: 'completed' },
   ];
 
-  // Day 1: 2026-09-15 -> Veteran 2 worked on 14th, so Veteran 1 and New Hire are selected
+  // Day 1: 2026-09-15 -> Veteran 2 worked yesterday (14th), New Hire & Extra Worker have low stay counts
   const day1 = selectOvertimeCrew({
     dutyDate: '2026-09-15',
     warehouseId: 1,
@@ -223,9 +226,11 @@ test('Fairness Pacing: Returning/new hire with initial completed baseline is not
     pastAssignments,
     requiredCount: 2,
   });
-  assert.ok(day1.selected.some((e) => e.id === 3), 'New Hire is selected for their first shift');
+  assert.ok(day1.selected.some((e) => e.id === 3), 'New Hire (0 actual stays) is selected for their first shift');
 
-  // Day 2: 2026-09-16 -> New Hire worked on 15th! They MUST NOT be selected again consecutively!
+  // Day 2: 2026-09-16 -> New Hire AND Veteran 1 worked yesterday (Sep 15).
+  // Extra Worker (last worked Sep 12) and Veteran 2 (last worked Sep 14) are rested → 2 rested available
+  // Anti-consecutive filter: nonResting = [Vet2, Extra Worker] → exactly 2 → New Hire must be excluded
   const updatedAssignments = [
     ...pastAssignments,
     { employee_id: 1, duty_date: '2026-09-15', status: 'completed' },
@@ -242,9 +247,55 @@ test('Fairness Pacing: Returning/new hire with initial completed baseline is not
 
   assert.ok(
     !day2.selected.some((e) => e.id === 3),
-    'New Hire must NOT be scheduled daily back-to-back'
+    'New Hire must NOT be scheduled daily back-to-back when rested workers are available'
   );
 });
+
+test('New Employee Fairness: New hire (0 actual pickups) is chosen before veteran even if veteran has high initial_completed_count baseline', () => {
+  // Scenario: A veteran employee joins with initial_completed_count:6 from a paper record
+  // but has 0 actual pickups recorded in this system.
+  // A newer employee has 3 actual pickups.
+  // The employee with 0 actual pickups should be chosen first (lower cohort).
+  const employees = [
+    { id: 1, name: 'Actual Veteran', experience: 'Senior', skill: 4, warehouse_id: 1, initial_completed_count: 6 },
+    { id: 2, name: 'Active Employee', experience: 'Mid', skill: 3, warehouse_id: 1, initial_completed_count: 0 },
+    { id: 3, name: 'New Hire', experience: 'Junior', skill: 2, warehouse_id: 1, initial_completed_count: 0 },
+  ];
+
+  const pastAssignments = [
+    // Active Employee has 3 real pickups recorded
+    { employee_id: 2, duty_date: '2026-09-01', status: 'completed' },
+    { employee_id: 2, duty_date: '2026-09-05', status: 'completed' },
+    { employee_id: 2, duty_date: '2026-09-10', status: 'completed' },
+    // Actual Veteran has 0 pickups in the system (initial_completed_count is just a baseline, not real history)
+  ];
+
+  const result = selectOvertimeCrew({
+    dutyDate: '2026-09-20',
+    warehouseId: 1,
+    employees,
+    pastAssignments,
+    requiredCount: 2,
+  });
+
+  assert.equal(result.selected.length, 2);
+
+  // Actual Veteran (0 actual picks, cohort 0) and New Hire (0 actual picks, cohort 0)
+  // must be chosen over Active Employee (3 actual picks, cohort 3)
+  assert.ok(
+    result.selected.some((e) => e.id === 1),
+    'Actual Veteran with 0 real pickups must be in cohort 0 and selected'
+  );
+  assert.ok(
+    result.selected.some((e) => e.id === 3),
+    'New Hire with 0 real pickups must be selected before someone with 3 actual stays'
+  );
+  assert.ok(
+    !result.selected.some((e) => e.id === 2),
+    'Active Employee with 3 real pickups must NOT be chosen when others have 0 actual stays'
+  );
+});
+
 
 test('Key Holder Rule: Algorithm always pairs at least 1 key holder when available', () => {
   const employees = [

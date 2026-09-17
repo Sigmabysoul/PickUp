@@ -73,17 +73,17 @@ export function computeEmployeeMetrics(emp, pastAssignments = [], targetDutyDate
 
   const { isSuperSenior, isHighSkill, isJunior, isMid, eligibleForNormalPickup } = classifyEmployee(emp);
 
-  let selectionReason = `Fair turn cohort (${effectiveCompletedCount} total stays)`;
+  let selectionReason = `In rotation (${completedCount} actual stays)`;
   if (isSuperSenior && !eligibleForNormalPickup) {
     selectionReason = 'Super Senior (Emergency / Big Shipment only)';
   } else if (hasMissedPriority) {
     selectionReason = `Missed-duty priority (absent on ${lastAbsentDate}, catch-up queued)`;
   } else if (workedYesterday) {
     selectionReason = `Worked yesterday (${lastCompletedDate}) · Rest day priority`;
-  } else if (!lastCompletedDate) {
-    selectionReason = `First turn in rotation (${effectiveCompletedCount} base)`;
+  } else if (completedCount === 0) {
+    selectionReason = 'New to rotation — first pickup pending';
   } else if (daysSinceLastCompleted !== null) {
-    selectionReason = `${effectiveCompletedCount} stays · Waited ${daysSinceLastCompleted} days since last stay (${lastCompletedDate})`;
+    selectionReason = `${completedCount} stays · Waited ${daysSinceLastCompleted} days since last stay (${lastCompletedDate})`;
   }
 
   const can_hold_key = Boolean(emp.can_hold_key);
@@ -175,16 +175,20 @@ function scoreCandidateSet(selectedSet, candidateSlice, targetDate) {
     score -= 300;
   }
 
-  // Fairness recency: prefer workers who haven't served in the longest time
+  // Fairness recency: strongly prefer workers who haven't served recently
   for (const e of selectedSet) {
-    if (!e.lastCompletedDate) {
+    if (e.completedCount === 0) {
+      score += 500; // Strong bonus: never done a pickup in this system
+    } else if (!e.lastCompletedDate) {
       score += 20; // First turn in rotation
     } else {
       const days = e.daysSinceLastCompleted || 0;
-      if (days <= 2) {
-        score -= 200; // Prefer giving at least 2 rest days between overtime shifts
+      if (days <= 3) {
+        score -= 500; // Stronger penalty: avoid anyone who worked within 3 days
+      } else if (days <= 7) {
+        score += Math.min(days * 3, 30);
       } else {
-        score += Math.min(days, 30);
+        score += Math.min(days, 60); // Reward longer waits more
       }
     }
     // Deterministic tie-breaker using employee id
@@ -277,10 +281,13 @@ export function selectOvertimeCrew({
     );
   }
 
-  // 5. Group candidates by effectiveCompletedCount to enforce Rule 2 (Fairness Cohorts)
+  // 5. Group candidates by actual completedCount (real pickups done in this system)
+  //    to enforce fair rotation (Rule 2). New employees start at 0 and get chosen first.
+  //    initialCompletedCount is NOT used here — it is informational only and must NOT
+  //    disadvantage new joiners by putting them in a later cohort.
   const cohortsMap = new Map();
   for (const emp of poolToUse) {
-    const count = emp.effectiveCompletedCount;
+    const count = emp.completedCount;   // ← raw actual count, no baseline added
     if (!cohortsMap.has(count)) {
       cohortsMap.set(count, []);
     }

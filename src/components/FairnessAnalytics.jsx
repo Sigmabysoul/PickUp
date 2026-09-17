@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   BarChart3,
   TrendingUp,
@@ -8,6 +8,7 @@ import {
   Award,
   Users,
   CheckCircle2,
+  Calendar,
 } from 'lucide-react';
 
 export default function FairnessAnalytics({
@@ -15,13 +16,58 @@ export default function FairnessAnalytics({
   assignments = [],
   runs = [],
 }) {
-  const activeEmployees = employees.filter((e) => e.active);
-  const totalCompleted = assignments.filter((a) => a.status === 'completed').length;
-  const totalScheduled = assignments.filter((a) => a.status === 'scheduled').length;
-  const totalAbsent = assignments.filter((a) => a.status === 'absent').length;
+  // ── Month Selector ──────────────────────────────────────────────────────────
+  const getTodayMonthStr = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
 
-  // Stays distribution
-  const stayCounts = activeEmployees.map((e) => e.completedCount || 0);
+  // Build list of months that have any assignment data, plus always include current month
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set();
+    monthSet.add(getTodayMonthStr());
+    for (const a of assignments) {
+      if (a.duty_date) {
+        monthSet.add(a.duty_date.slice(0, 7));
+      }
+    }
+    return Array.from(monthSet).sort().reverse(); // Most recent first
+  }, [assignments]);
+
+  const [selectedMonth, setSelectedMonth] = useState(() => getTodayMonthStr());
+
+  const formatMonthLabel = (monthStr) => {
+    const [year, month] = monthStr.split('-');
+    const date = new Date(Number(year), Number(month) - 1, 1);
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  // ── Filter Assignments to Selected Month ────────────────────────────────────
+  const monthAssignments = useMemo(
+    () => assignments.filter((a) => a.duty_date && a.duty_date.startsWith(selectedMonth)),
+    [assignments, selectedMonth]
+  );
+
+  const activeEmployees = employees.filter((e) => e.active && e.experience !== 'Super Senior');
+
+  // Per-employee stay count for the selected month
+  const monthStayByEmpId = useMemo(() => {
+    const map = new Map();
+    for (const a of monthAssignments) {
+      if (a.status === 'completed') {
+        const prev = map.get(String(a.employee_id)) || 0;
+        map.set(String(a.employee_id), prev + 1);
+      }
+    }
+    return map;
+  }, [monthAssignments]);
+
+  const totalCompleted = monthAssignments.filter((a) => a.status === 'completed').length;
+  const totalScheduled = monthAssignments.filter((a) => a.status === 'scheduled').length;
+  const totalAbsent = monthAssignments.filter((a) => a.status === 'absent').length;
+
+  // Stays distribution (month-scoped)
+  const stayCounts = activeEmployees.map((e) => monthStayByEmpId.get(String(e.id)) || 0);
   const minStays = stayCounts.length > 0 ? Math.min(...stayCounts) : 0;
   const maxStays = stayCounts.length > 0 ? Math.max(...stayCounts) : 1;
   const avgStays =
@@ -29,7 +75,7 @@ export default function FairnessAnalytics({
       ? (stayCounts.reduce((a, b) => a + b, 0) / stayCounts.length).toFixed(1)
       : 0;
 
-  // Variance & Fairness Score
+  // Variance & Fairness Score (month-scoped)
   const variance = stayCounts.length > 0 ? maxStays - minStays : 0;
   const fairnessRating =
     variance <= 1
@@ -45,15 +91,66 @@ export default function FairnessAnalytics({
       ? 'Minor turn variance across staff'
       : `Deviation spread: ${variance} shifts`;
 
+  // Priority queue: missed duty this month
   const priorityWorkers = employees.filter((e) => e.hasMissedPriority);
 
-  // Sorted by completed stays desc
+  // Sorted by month stays desc
   const sortedActive = [...activeEmployees].sort(
-    (a, b) => (b.completedCount || 0) - (a.completedCount || 0)
+    (a, b) =>
+      (monthStayByEmpId.get(String(b.id)) || 0) - (monthStayByEmpId.get(String(a.id)) || 0)
   );
+
+  // Filter runs to selected month
+  const monthRuns = runs.filter((r) => r.duty_date && r.duty_date.startsWith(selectedMonth));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Month Selector Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          padding: '0.85rem 1.1rem',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-color)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <Calendar size={18} color="var(--accent-cyan)" />
+          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+            Showing: {formatMonthLabel(selectedMonth)}
+          </span>
+          <span
+            style={{
+              fontSize: '0.78rem',
+              color: 'var(--text-muted)',
+              background: 'var(--bg-surface-elevated)',
+              padding: '0.2rem 0.55rem',
+              borderRadius: '999px',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            {totalCompleted} stays this month
+          </span>
+        </div>
+        <select
+          className="form-select"
+          style={{ width: 'auto', minWidth: '180px', fontSize: '0.9rem', padding: '0.4rem 0.75rem' }}
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+        >
+          {availableMonths.map((m) => (
+            <option key={m} value={m}>
+              {formatMonthLabel(m)}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Metric Cards */}
       <div
         style={{
@@ -136,7 +233,7 @@ export default function FairnessAnalytics({
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div className="card-title" style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Users size={20} color="var(--accent-cyan)" />
-            Active Staff Turn Equity Tracker
+            Staff Turn Equity — {formatMonthLabel(selectedMonth)}
           </div>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'var(--bg-surface-elevated)', padding: '0.25rem 0.65rem', borderRadius: '999px', border: '1px solid var(--border-color)' }}>
             {activeEmployees.length} Active Workers
@@ -150,11 +247,13 @@ export default function FairnessAnalytics({
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '1rem', marginTop: '0.5rem' }}>
             {sortedActive.map((emp) => {
-              const count = emp.completedCount || 0;
+              const count = monthStayByEmpId.get(String(emp.id)) || 0;
               const maxVal = maxStays > 0 ? maxStays : 1;
               const pct = Math.min(100, Math.round((count / maxVal) * 100));
               const badgeClass =
-                emp.experience === 'Senior'
+                emp.experience === 'Super Senior'
+                  ? 'badge-super-senior'
+                  : emp.experience === 'Senior'
                   ? 'badge-senior'
                   : emp.experience === 'Mid'
                   ? 'badge-mid'
@@ -192,7 +291,9 @@ export default function FairnessAnalytics({
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     <span>{emp.skill >= 4 ? 'Lead / Senior' : emp.skill <= 2 ? 'Junior' : 'Competent Mid'}</span>
-                    <span>Skill {emp.skill}/5</span>
+                    <span>
+                      Skill {emp.skill}/5 · All-time: {emp.completedCount || 0}
+                    </span>
                   </div>
                 </div>
               );
@@ -258,17 +359,17 @@ export default function FairnessAnalytics({
           <div className="card-header">
             <div className="card-title" style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <BarChart3 size={20} color="var(--accent-blue)" />
-              Recent Generation Runs & Warnings
+              Generation Runs — {formatMonthLabel(selectedMonth)}
             </div>
           </div>
 
-          {runs.length === 0 ? (
+          {monthRuns.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-              No automated runs recorded yet.
+              No automated runs recorded for {formatMonthLabel(selectedMonth)}.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {runs.slice(0, 5).map((run, i) => (
+              {monthRuns.slice(0, 8).map((run, i) => (
                 <div
                   key={i}
                   style={{
