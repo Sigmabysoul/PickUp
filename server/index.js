@@ -223,7 +223,7 @@ app.get('/api/bootstrap', async (req, res) => {
       }
     }
     const employeesRes = await pool.query(
-      `SELECT e.id, e.warehouse_id, e.name, e.experience, e.skill, e.initial_completed_count, e.can_hold_key, e.active, e.created_at, w.name as warehouse_name
+      `SELECT e.id, e.warehouse_id, e.name, e.experience, e.skill, e.initial_completed_count, e.can_hold_key, e.eligible_for_normal_pickup, e.active, e.created_at, w.name as warehouse_name
        FROM employees e
        LEFT JOIN warehouses w ON e.warehouse_id = w.id
        WHERE e.archived = false
@@ -239,7 +239,7 @@ app.get('/api/bootstrap', async (req, res) => {
     const assignmentsRes = await pool.query(
       `SELECT a.id, a.employee_id, a.warehouse_id, to_char(a.duty_date, 'YYYY-MM-DD') as duty_date,
               a.status, a.selected_at, a.updated_at, a.replaces_assignment_id,
-              e.name as employee_name, e.experience, e.skill, e.can_hold_key, e.warehouse_id as home_warehouse_id,
+              e.name as employee_name, e.experience, e.skill, e.can_hold_key, e.eligible_for_normal_pickup, e.warehouse_id as home_warehouse_id,
               hw.name as home_warehouse_name, w.name as warehouse_name
        FROM assignments a
        JOIN employees e ON a.employee_id = e.id
@@ -339,7 +339,7 @@ app.patch('/api/warehouses/:id', async (req, res) => {
 // --------------------------------------------------------------------------
 app.post('/api/employees', async (req, res) => {
   try {
-    let { warehouse_id, name, experience, skill, active, initial_completed_count, can_hold_key } = req.body;
+    let { warehouse_id, name, experience, skill, active, initial_completed_count, can_hold_key, eligible_for_normal_pickup } = req.body;
     if (!name || !experience || skill == null) {
       return res.status(400).json({ error: 'Missing required employee fields (name, experience, skill)' });
     }
@@ -358,11 +358,11 @@ app.post('/api/employees', async (req, res) => {
     }
 
     // Fairness for newly added employees:
-    // If initial_completed_count is not provided and experience is not 'Super Senior',
+    // If initial_completed_count is not provided and employee is not an on-call-only Super Senior,
     // align initial count with the minimum effective completed stays among existing active staff
     // so they do not get picked on their very first consecutive days unfairly!
     if (initial_completed_count === undefined || initial_completed_count === null) {
-      if (experience === 'Super Senior') {
+      if (experience === 'Super Senior' && !eligible_for_normal_pickup) {
         initial_completed_count = 0;
       } else {
         const statsRes = await pool.query(`
@@ -377,16 +377,25 @@ app.post('/api/employees', async (req, res) => {
             WHERE status = 'completed'
             GROUP BY employee_id
           ) cnt ON e.id = cnt.employee_id
-          WHERE e.archived = false AND e.active = true AND e.experience != 'Super Senior'
+          WHERE e.archived = false AND e.active = true AND (e.experience != 'Super Senior' OR e.eligible_for_normal_pickup = true)
         `);
         initial_completed_count = Number(statsRes.rows[0]?.min_stays || 0);
       }
     }
 
     const result = await pool.query(
-      `INSERT INTO employees (warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [warehouse_id, name.trim(), experience, Number(skill), Number(initial_completed_count), Boolean(can_hold_key), active ?? true]
+      `INSERT INTO employees (warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, eligible_for_normal_pickup, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [
+        warehouse_id,
+        name.trim(),
+        experience,
+        Number(skill),
+        Number(initial_completed_count),
+        Boolean(can_hold_key),
+        Boolean(eligible_for_normal_pickup),
+        active ?? true,
+      ]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -397,7 +406,7 @@ app.post('/api/employees', async (req, res) => {
 app.patch('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { warehouse_id, name, experience, skill, active, initial_completed_count, can_hold_key } = req.body;
+    const { warehouse_id, name, experience, skill, active, initial_completed_count, can_hold_key, eligible_for_normal_pickup } = req.body;
     const fields = [];
     const values = [];
     let idx = 1;
@@ -429,6 +438,10 @@ app.patch('/api/employees/:id', async (req, res) => {
     if (can_hold_key !== undefined) {
       fields.push(`can_hold_key = $${idx++}`);
       values.push(Boolean(can_hold_key));
+    }
+    if (eligible_for_normal_pickup !== undefined) {
+      fields.push(`eligible_for_normal_pickup = $${idx++}`);
+      values.push(Boolean(eligible_for_normal_pickup));
     }
 
     if (fields.length === 0) {
@@ -598,7 +611,7 @@ app.post('/api/generate', async (req, res) => {
     // Fetch all active employees
     const employees = (
       await client.query(
-        `SELECT id, warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, active, archived
+        `SELECT id, warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, eligible_for_normal_pickup, active, archived
          FROM employees
          WHERE archived = false AND active = true`
       )
@@ -647,31 +660,23 @@ app.post('/api/generate', async (req, res) => {
     const allWarnings = [];
 
     if (!warehouse_id) {
-      // Check if a Super Senior is already assigned on this date
-      const ssCheck = await client.query(
-        `SELECT a.*, e.name as employee_name 
-         FROM assignments a 
-         JOIN employees e ON a.employee_id = e.id 
-         WHERE a.duty_date = $1 AND e.experience = 'Super Senior' AND a.status != 'absent'`,
+      // Check if an Emergency Super Senior is dispatched on this date
+      const logRes = await client.query(
+        `SELECT notes FROM daily_logs WHERE duty_date = $1`,
         [duty_date]
       );
-      const hasSuperSenior = ssCheck.rows.length > 0;
+      const notes = logRes.rows[0]?.notes || '';
+      const isEmergencySuperSenior = notes.includes('Emergency Super Senior');
 
-      // Check daily log notes for crew mode if Super Senior is on duty
       let superSeniorCrewMode = 'with_2';
-      if (hasSuperSenior) {
-        const logRes = await client.query(
-          `SELECT notes FROM daily_logs WHERE duty_date = $1`,
-          [duty_date]
-        );
-        const notes = logRes.rows[0]?.notes || '';
+      if (isEmergencySuperSenior) {
         if (notes.includes('alone')) superSeniorCrewMode = 'alone';
         else if (notes.includes('with_1')) superSeniorCrewMode = 'with_1';
         else superSeniorCrewMode = 'with_2';
       }
 
       let defaultCount = 2;
-      if (hasSuperSenior) {
+      if (isEmergencySuperSenior) {
         defaultCount = superSeniorCrewMode === 'alone' ? 0 : superSeniorCrewMode === 'with_1' ? 1 : 2;
       }
 
@@ -695,14 +700,24 @@ app.post('/api/generate', async (req, res) => {
       const unassignedCrew = [...selected];
       
       if (!dry_run) {
-        // Only delete regular scheduled normal workers; do NOT remove Super Seniors!
-        await client.query(
-          `DELETE FROM assignments 
-           WHERE duty_date = $1 
-             AND status = 'scheduled' 
-             AND employee_id NOT IN (SELECT id FROM employees WHERE experience = 'Super Senior')`,
-          [duty_date]
-        );
+        if (isEmergencySuperSenior) {
+          // Dispatched Emergency Super Senior is preserved, only replace normal helpers
+          await client.query(
+            `DELETE FROM assignments 
+             WHERE duty_date = $1 
+               AND status = 'scheduled' 
+               AND employee_id NOT IN (SELECT id FROM employees WHERE experience = 'Super Senior')`,
+            [duty_date]
+          );
+        } else {
+          // Standard schedule recalculation
+          await client.query(
+            `DELETE FROM assignments 
+             WHERE duty_date = $1 
+               AND status = 'scheduled'`,
+            [duty_date]
+          );
+        }
       }
       
       for (const wh of warehouses) {
@@ -753,18 +768,12 @@ app.post('/api/generate', async (req, res) => {
     } else {
       // Single warehouse target
       const wh = warehouses.find((w) => String(w.id) === String(warehouse_id)) || warehouses[0];
-      const ssCheck = await client.query(
-        `SELECT a.*, e.name as employee_name 
-         FROM assignments a 
-         JOIN employees e ON a.employee_id = e.id 
-         WHERE a.duty_date = $1 AND e.experience = 'Super Senior' AND a.status != 'absent'`,
-        [duty_date]
-      );
-      const hasSuperSenior = ssCheck.rows.length > 0;
+      const logRes = await client.query(`SELECT notes FROM daily_logs WHERE duty_date = $1`, [duty_date]);
+      const notes = logRes.rows[0]?.notes || '';
+      const isEmergencySuperSenior = notes.includes('Emergency Super Senior');
+
       let defaultCount = 2;
-      if (hasSuperSenior) {
-        const logRes = await client.query(`SELECT notes FROM daily_logs WHERE duty_date = $1`, [duty_date]);
-        const notes = logRes.rows[0]?.notes || '';
+      if (isEmergencySuperSenior) {
         if (notes.includes('alone')) defaultCount = 0;
         else if (notes.includes('with_1')) defaultCount = 1;
         else defaultCount = 2;
@@ -791,14 +800,24 @@ app.post('/api/generate', async (req, res) => {
       if (warnings.length > 0) allWarnings.push(...warnings);
 
       if (!dry_run) {
-        await client.query(
-          `DELETE FROM assignments 
-           WHERE duty_date = $1 
-             AND warehouse_id = $2 
-             AND status = 'scheduled'
-             AND employee_id NOT IN (SELECT id FROM employees WHERE experience = 'Super Senior')`,
-          [duty_date, wh.id]
-        );
+        if (isEmergencySuperSenior) {
+          await client.query(
+            `DELETE FROM assignments 
+             WHERE duty_date = $1 
+               AND warehouse_id = $2 
+               AND status = 'scheduled'
+               AND employee_id NOT IN (SELECT id FROM employees WHERE experience = 'Super Senior')`,
+            [duty_date, wh.id]
+          );
+        } else {
+          await client.query(
+            `DELETE FROM assignments 
+             WHERE duty_date = $1 
+               AND warehouse_id = $2 
+               AND status = 'scheduled'`,
+            [duty_date, wh.id]
+          );
+        }
         for (const emp of selected) {
           await client.query(
             `INSERT INTO assignments (employee_id, warehouse_id, duty_date, status)
@@ -879,9 +898,9 @@ app.post('/api/assignments/super-senior', async (req, res) => {
         const alreadyAssignedEmpIds = normalAssigned.map((a) => a.employee_id);
 
         const allCandidates = (await client.query(
-          `SELECT id, warehouse_id, name, experience, skill, active, archived
+          `SELECT id, warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, eligible_for_normal_pickup, active, archived
            FROM employees
-           WHERE archived = false AND active = true AND experience != 'Super Senior'
+           WHERE archived = false AND active = true AND (experience != 'Super Senior' OR eligible_for_normal_pickup = true)
              AND ($1::bigint[] IS NULL OR id != ALL($1::bigint[]))`,
           [alreadyAssignedEmpIds.length > 0 ? alreadyAssignedEmpIds : null]
         )).rows;
@@ -1005,9 +1024,9 @@ app.post('/api/assignments/super-senior', async (req, res) => {
       const alreadyAssignedEmpIds = [targetSuperSeniorId, ...normalAssigned.map((a) => a.employee_id)];
 
       const allCandidates = (await client.query(
-        `SELECT id, warehouse_id, name, experience, skill, active, archived
+        `SELECT id, warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, eligible_for_normal_pickup, active, archived
          FROM employees
-         WHERE archived = false AND active = true AND experience != 'Super Senior'
+         WHERE archived = false AND active = true AND (experience != 'Super Senior' OR eligible_for_normal_pickup = true)
            AND id != ALL($1::bigint[])`,
         [alreadyAssignedEmpIds]
       )).rows;
@@ -1164,7 +1183,7 @@ app.post('/api/assignments/report-absence', async (req, res) => {
 
     // 4. Find immediate replacement candidate across BOTH warehouses on this date!
     const employeesRes = await client.query(
-      `SELECT id, warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, active, archived
+      `SELECT id, warehouse_id, name, experience, skill, initial_completed_count, can_hold_key, eligible_for_normal_pickup, active, archived
        FROM employees
        WHERE active = true AND archived = false`
     );
@@ -1544,13 +1563,6 @@ app.get('/api/export', async (req, res) => {
       [],
       [
         'Duty Date',
-        'Day of Week',
-        'Warehouse',
-        'Assigned Employee',
-        'Experience',
-        'Skill Rating',
-        'Duty Status',
-        'Facility Outcome',
         'Day',
         'Assigned Staff 1',
         'Assigned Staff 2',
@@ -1565,9 +1577,6 @@ app.get('/api/export', async (req, res) => {
     // Group records by duty_date
     const assignMap = new Map();
     for (const r of records) {
-      const d = new Date(r.duty_date + 'T00:00:00');
-      const dayOfWeek = dayNames[d.getDay()] || '';
-      const dayLog = logMap.get(r.duty_date);
       if (!assignMap.has(r.duty_date)) {
         assignMap.set(r.duty_date, []);
       }
@@ -1624,14 +1633,6 @@ app.get('/api/export', async (req, res) => {
       }
 
       rows.push([
-        r.duty_date,
-        dayOfWeek,
-        r.warehouse_name,
-        r.employee_name,
-        r.experience,
-        `${r.skill}/5`,
-        r.status.toUpperCase(),
-        dayLog ? dayLog.status.replace('_', ' ').toUpperCase() : 'STANDARD',
         dateStr,
         dayName,
         normalWorkers[0]?.employee_name || '-',

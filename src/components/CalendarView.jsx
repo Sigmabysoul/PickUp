@@ -40,9 +40,17 @@ export default function CalendarView({
   onToggleEmergencySunday,
   onGeneratePlan,
 }) {
-  const todayStr = '2026-09-16'; // Anchor date
-  const [currentDate, setCurrentDate] = useState(() => new Date(2026, 8, 16)); // September 2026
-  const [selectedDateStr, setSelectedDateStr] = useState('2026-09-16');
+  const getTodayDateStr = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const todayStr = getTodayDateStr();
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [selectedDateStr, setSelectedDateStr] = useState(() => getTodayDateStr());
   const [viewMode, setViewMode] = useState('calendar'); // 'calendar' | 'list'
 
   // Super Senior Modal State (Emergency Big Shipments)
@@ -57,12 +65,10 @@ export default function CalendarView({
   const [customReason, setCustomReason] = useState('');
   const [isSubmittingAbsence, setIsSubmittingAbsence] = useState(false);
 
-  // Manual Historical Backfill state
   // Manual Historical Backfill state (2 slots for standard 2-worker crews)
   const [isBackfillModalOpen, setIsBackfillModalOpen] = useState(false);
-  const [backfillDate, setBackfillDate] = useState('2026-09-15');
+  const [backfillDate, setBackfillDate] = useState(() => getTodayDateStr());
   const [backfillWhId, setBackfillWhId] = useState('');
-  const [backfillEmpId, setBackfillEmpId] = useState('');
   const [backfillEmpId1, setBackfillEmpId1] = useState('');
   const [backfillEmpId2, setBackfillEmpId2] = useState('');
   const [isSubmittingBackfill, setIsSubmittingBackfill] = useState(false);
@@ -85,8 +91,9 @@ export default function CalendarView({
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
   const goToToday = () => {
-    setCurrentDate(new Date(2026, 8, 16));
-    setSelectedDateStr('2026-09-16');
+    const now = new Date();
+    setCurrentDate(now);
+    setSelectedDateStr(getTodayDateStr());
   };
 
   // Month grid setup
@@ -302,13 +309,9 @@ export default function CalendarView({
     }
   };
 
-  // Backfill Modal Handlers
   // Backfill Modal Handlers (2 slots for standard 2-person crew)
   const handleOpenBackfillModal = (dateToUse = selectedDateStr) => {
     setBackfillDate(dateToUse);
-    setBackfillWhId(warehouses[0]?.id || '2');
-    const firstActive = employees.find((e) => e.active);
-    setBackfillEmpId(firstActive ? firstActive.id : '');
     setBackfillWhId(activeWarehouse?.id || warehouses[0]?.id || '1');
     const activeEmps = employees.filter((e) => e.active);
     setBackfillEmpId1(activeEmps[0] ? String(activeEmps[0].id) : '');
@@ -318,7 +321,6 @@ export default function CalendarView({
 
   const handleConfirmBackfill = async (e) => {
     e.preventDefault();
-    if (!backfillEmpId || !backfillWhId || !backfillDate) return;
     if (!backfillEmpId1 || !backfillDate) {
       alert('Please select at least one employee for the pickup record.');
       return;
@@ -328,8 +330,6 @@ export default function CalendarView({
     try {
       // 1. Log First Employee
       await onLogHistoricalPickup({
-        employee_id: backfillEmpId,
-        warehouse_id: backfillWhId,
         employee_id: backfillEmpId1,
         warehouse_id: whId,
         duty_date: backfillDate,
@@ -345,7 +345,6 @@ export default function CalendarView({
       }
 
       setIsBackfillModalOpen(false);
-      showToast(`Logged historical pickup for ${backfillDate}!`);
       showToast(
         backfillEmpId2 && String(backfillEmpId2) !== String(backfillEmpId1)
           ? `Logged 2-worker historical pickup for ${backfillDate}!`
@@ -488,7 +487,6 @@ export default function CalendarView({
                   let cellClass = 'day-box';
                   if (!cell.isCurrentMonth) cellClass += ' day-other-month';
 
-                  if (statusInfo.type === 'overtime_stay') {
                   if (hasSuperSenior) {
                     cellClass += ' day-status-supersenior';
                   } else if (statusInfo.type === 'overtime_stay') {
@@ -538,34 +536,27 @@ export default function CalendarView({
                 <div className="legend-item">
                   <span className="legend-dot dot-overtime"></span>
                   <span className="legend-text">Overtime Stay</span>
-                  <span className="legend-text">Overtime Stay (Green)</span>
                 </div>
                 <div className="legend-item">
-                  <span style={{ fontSize: '0.85rem' }}>👑</span>
-                  <span className="legend-text">Super Senior</span>
                   <span className="legend-dot dot-supersenior"></span>
                   <span style={{ fontSize: '0.82rem', marginLeft: '-2px' }}>👑</span>
-                  <span className="legend-text">Super Senior (Purple)</span>
+                  <span className="legend-text">Super Senior</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-before7pm"></span>
-                  <span className="legend-text">Done Before 7pm</span>
-                  <span className="legend-text">Before 7pm (Light Blue)</span>
+                  <span className="legend-text">Before 7pm</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-nopickup"></span>
                   <span className="legend-text">No Pickup</span>
-                  <span className="legend-text">No Pickup (Red)</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-holiday"></span>
                   <span className="legend-text">Holiday (Closed)</span>
-                  <span className="legend-text">Holiday (Dark Blue)</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-sunday"></span>
                   <span className="legend-text">Sunday Off</span>
-                  <span className="legend-text">Sunday Off (Grey)</span>
                 </div>
                 <div className="legend-item">
                   <span className="legend-dot dot-scheduled"></span>
@@ -1494,18 +1485,14 @@ export default function CalendarView({
               </div>
 
               <div className="form-group">
-                <label className="form-label">Employee Who Stayed Overtime:</label>
                 <label className="form-label">Employee 1 Who Stayed Overtime (Slot 1):</label>
                 <select
                   className="form-select"
-                  value={backfillEmpId}
-                  onChange={(e) => setBackfillEmpId(e.target.value)}
                   value={backfillEmpId1}
                   onChange={(e) => setBackfillEmpId1(e.target.value)}
                   required
                 >
                   <option value="" disabled>
-                    -- Select Employee --
                     -- Select First Employee --
                   </option>
                   {employees
@@ -1552,7 +1539,6 @@ export default function CalendarView({
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={isSubmittingBackfill || !backfillEmpId}
                   disabled={isSubmittingBackfill || !backfillEmpId1}
                 >
                   {isSubmittingBackfill ? 'Saving Record...' : 'Save Historical Pickup'}

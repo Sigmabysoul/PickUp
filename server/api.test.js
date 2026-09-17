@@ -50,7 +50,7 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     try {
       await pool.query("DELETE FROM app_users WHERE username LIKE '__test_%'");
       await pool.query("DELETE FROM absences WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
-      await pool.query("UPDATE assignments SET replaces_assignment_id = NULL WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
+      await pool.query("UPDATE assignments SET replaces_assignment_id = NULL");
       await pool.query("DELETE FROM assignments WHERE employee_id IN (SELECT id FROM employees WHERE name LIKE '__Test_%')");
       await pool.query("DELETE FROM employees WHERE name LIKE '__Test_%'");
       await pool.query("DELETE FROM assignment_runs WHERE duty_date IN ('2026-09-25', '2026-09-28', '2026-09-29')");

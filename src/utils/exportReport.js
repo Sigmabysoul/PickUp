@@ -1,7 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export function filterMonthData(month, assignments = [], dailyLogs = []) {
@@ -127,24 +126,15 @@ export function filterMonthData(month, assignments = [], dailyLogs = []) {
 }
 
 export function exportToCSV({ month, assignments = [], warehouses = [], dailyLogs = [] }) {
-  const { monthAssignments, monthLogs, stats } = filterMonthData(month, assignments, dailyLogs);
-  const logMap = new Map(monthLogs.map((l) => [l.duty_date, l]));
-  const { dailyRecords, summary } = filterMonthData(month, assignments, dailyLogs);
+  const { dailyRecords, summary, stats } = filterMonthData(month, assignments, dailyLogs);
 
   const rows = [
-    ['PickUp Logistics - Overtime Pickup Duty Report', `Month: ${month}`],
     ['PickUp Logistics - Monthly Overtime Duty Report', `Month: ${month}`],
     ['Generated At:', new Date().toLocaleString()],
     [],
     [
       'Duty Date',
       'Day',
-      'Warehouse',
-      'Assigned Employee',
-      'Experience',
-      'Skill',
-      'Duty Status',
-      'Facility Outcome',
       'Assigned Staff 1',
       'Assigned Staff 2',
       'Super Senior (Emergency)',
@@ -153,22 +143,8 @@ export function exportToCSV({ month, assignments = [], warehouses = [], dailyLog
     ],
   ];
 
-  for (const a of monthAssignments) {
-    const d = new Date(a.duty_date + 'T00:00:00');
-    const day = dayNames[d.getDay()] || '';
-    const log = logMap.get(a.duty_date);
-
   for (const r of dailyRecords) {
     rows.push([
-      a.duty_date,
-      day,
-      a.warehouse_name || 'Warehouse',
-      a.employee_name,
-      a.experience,
-      `${a.skill}/5`,
-      a.status.toUpperCase(),
-      log ? log.status.replace('_', ' ').toUpperCase() : 'STANDARD',
-      log?.notes || '',
       r.date,
       r.day,
       r.staff1,
@@ -229,9 +205,7 @@ export function exportToCSV({ month, assignments = [], warehouses = [], dailyLog
 }
 
 export function exportToPDF({ month, assignments = [], warehouses = [], dailyLogs = [] }) {
-  const { monthAssignments, monthLogs, stats } = filterMonthData(month, assignments, dailyLogs);
-  const logMap = new Map(monthLogs.map((l) => [l.duty_date, l]));
-  const { dailyRecords, summary } = filterMonthData(month, assignments, dailyLogs);
+  const { dailyRecords, summary, stats } = filterMonthData(month, assignments, dailyLogs);
 
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -240,7 +214,6 @@ export function exportToPDF({ month, assignments = [], warehouses = [], dailyLog
   });
 
   // Header Banner
-  doc.setFillColor(14, 17, 24); // Dark background header
   doc.setFillColor(14, 17, 24);
   doc.rect(0, 0, 210, 36, 'F');
 
@@ -252,15 +225,13 @@ export function exportToPDF({ month, assignments = [], warehouses = [], dailyLog
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(56, 189, 248);
-  doc.text('Overtime Pickup Duty Monthly Report', 14, 23);
   doc.text('Monthly Overtime Pickup Duty Report', 14, 23);
 
   doc.setTextColor(148, 163, 184);
   doc.setFontSize(9);
   doc.text(`Report Period: ${month}  ·  Generated: ${new Date().toLocaleDateString()}`, 14, 30);
 
-  // Summary Metrics Cards
-  let startY = 44;
+  // Summary Metrics Cards (2 rows of 4 cards)
   const startY = 44;
   doc.setDrawColor(226, 232, 240);
   doc.setFillColor(248, 250, 252);
@@ -277,24 +248,19 @@ export function exportToPDF({ month, assignments = [], warehouses = [], dailyLog
   ];
 
   metrics.forEach((m, idx) => {
-    const x = 14 + idx * 47;
-    doc.roundedRect(x, startY, 44, 18, 2, 2, 'FD');
-    doc.setFontSize(8);
+    const x = 14 + (idx % 4) * 47;
+    const y = startY + Math.floor(idx / 4) * 22;
+    doc.roundedRect(x, y, 44, 18, 2, 2, 'FD');
     doc.setFontSize(7.5);
     doc.setTextColor(100, 116, 139);
     doc.setFont('helvetica', 'bold');
-    doc.text(m.label.toUpperCase(), x + 4, startY + 6);
+    doc.text(m.label.toUpperCase(), x + 4, y + 6);
 
-    doc.setFontSize(14);
+    doc.setFontSize(13);
     doc.setTextColor(15, 23, 42);
-    doc.text(m.val, x + 4, startY + 14);
+    doc.text(m.val, x + 4, y + 14);
   });
 
-  // Main Table
-  const tableData = monthAssignments.map((a) => {
-    const d = new Date(a.duty_date + 'T00:00:00');
-    const day = dayNames[d.getDay()] || '';
-    const log = logMap.get(a.duty_date);
   // Main Daily Roster Table
   const tableData = dailyRecords.map((r) => [
     r.date,
@@ -305,34 +271,18 @@ export function exportToPDF({ month, assignments = [], warehouses = [], dailyLog
     r.outcome,
   ]);
 
-    return [
-      a.duty_date,
-      day,
-      a.warehouse_name || 'Warehouse',
-      a.employee_name,
-      a.experience,
-      `${a.skill}/5`,
-      a.status.toUpperCase(),
-      log ? log.status.replace('_', ' ').toUpperCase() : 'STANDARD',
-    ];
-  });
-
   autoTable(doc, {
-    startY: startY + 24,
-    head: [['Date', 'Day', 'Warehouse', 'Assigned Staff', 'Rank', 'Skill', 'Status', 'Facility Outcome']],
-    body: tableData.length > 0 ? tableData : [['No pickup duties recorded in this month.', '', '', '', '', '', '', '']],
+    startY: startY + 48,
     head: [['Date', 'Day', 'Assigned Staff 1', 'Assigned Staff 2', 'Super Senior', 'Outcome']],
-    body: tableData,
+    body: tableData.length > 0 ? tableData : [['No pickup duties recorded in this month.', '', '', '', '', '']],
     theme: 'striped',
     headStyles: {
       fillColor: [30, 41, 59],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 8.5,
       fontSize: 8,
     },
     bodyStyles: {
-      fontSize: 8,
       fontSize: 7.5,
       textColor: [30, 41, 59],
     },
@@ -400,4 +350,3 @@ export function exportToPDF({ month, assignments = [], warehouses = [], dailyLog
 
   doc.save(`pickup-report-${month}.pdf`);
 }
-

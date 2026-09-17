@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS employees (
     skill SMALLINT NOT NULL CHECK (skill >= 1 AND skill <= 5),
     initial_completed_count INTEGER DEFAULT 0 NOT NULL,
     can_hold_key BOOLEAN DEFAULT FALSE NOT NULL,
+    eligible_for_normal_pickup BOOLEAN DEFAULT FALSE NOT NULL,
     active BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     archived BOOLEAN DEFAULT FALSE NOT NULL

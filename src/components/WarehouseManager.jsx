@@ -191,8 +191,7 @@ export default function WarehouseManager({
   // Export Modal State (Defaults to previous month based on current anchor date 2026-09)
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportMonth, setExportMonth] = useState(() => {
-    // Current application anchor is September 2026 -> Previous month is August 2026 (2026-08)
-    const now = new Date(2026, 8, 16);
+    const now = new Date();
     const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const y = prev.getFullYear();
     const m = String(prev.getMonth() + 1).padStart(2, '0');

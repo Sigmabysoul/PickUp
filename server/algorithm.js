@@ -12,10 +12,14 @@
 
 export function classifyEmployee(emp) {
   const isSuperSenior = emp.experience === 'Super Senior';
-  const isHighSkill = !isSuperSenior && (Number(emp.skill) >= 4 || emp.experience === 'Senior');
+  const eligibleForNormalPickup = Boolean(emp.eligible_for_normal_pickup);
+  // If Super Senior is eligible for normal pickup, treat them as high-skill in normal crew pairing
+  const isHighSkill =
+    (isSuperSenior && eligibleForNormalPickup) ||
+    (!isSuperSenior && (Number(emp.skill) >= 4 || emp.experience === 'Senior'));
   const isJunior = !isSuperSenior && (Number(emp.skill) <= 2 || emp.experience === 'Junior');
   const isMid = !isSuperSenior && !isHighSkill && !isJunior;
-  return { isSuperSenior, isHighSkill, isJunior, isMid };
+  return { isSuperSenior, isHighSkill, isJunior, isMid, eligibleForNormalPickup };
 }
 
 export function computeEmployeeMetrics(emp, pastAssignments = [], targetDutyDate = null) {
@@ -67,10 +71,10 @@ export function computeEmployeeMetrics(emp, pastAssignments = [], targetDutyDate
     }
   }
 
-  const { isSuperSenior, isHighSkill, isJunior, isMid } = classifyEmployee(emp);
+  const { isSuperSenior, isHighSkill, isJunior, isMid, eligibleForNormalPickup } = classifyEmployee(emp);
 
   let selectionReason = `Fair turn cohort (${effectiveCompletedCount} total stays)`;
-  if (isSuperSenior) {
+  if (isSuperSenior && !eligibleForNormalPickup) {
     selectionReason = 'Super Senior (Emergency / Big Shipment only)';
   } else if (hasMissedPriority) {
     selectionReason = `Missed-duty priority (absent on ${lastAbsentDate}, catch-up queued)`;
@@ -83,10 +87,12 @@ export function computeEmployeeMetrics(emp, pastAssignments = [], targetDutyDate
   }
 
   const can_hold_key = Boolean(emp.can_hold_key);
+  const eligible_for_normal_pickup = Boolean(emp.eligible_for_normal_pickup);
 
   return {
     ...emp,
     can_hold_key,
+    eligible_for_normal_pickup,
     completedCount,
     initialCompletedCount,
     effectiveCompletedCount,
@@ -208,12 +214,12 @@ export function selectOvertimeCrew({
 }) {
   const warnings = [];
 
-  // 1. Filter eligible candidates: active, not archived, matching warehouse, and NOT Super Senior (on-call only)
+  // 1. Filter eligible candidates: active, not archived, matching warehouse, and NOT Super Senior (unless eligible for normal pickup)
   const eligible = employees.filter(
     (e) =>
       !e.archived &&
       e.active !== false &&
-      e.experience !== 'Super Senior' &&
+      (e.experience !== 'Super Senior' || Boolean(e.eligible_for_normal_pickup)) &&
       (!warehouseId || e.warehouse_id == null || String(e.warehouse_id) === String(warehouseId))
   );
 
