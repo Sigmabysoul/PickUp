@@ -204,12 +204,10 @@ export async function autoCloseUnconfirmedPastAssignments(clientOrPool = pool) {
       const currentStatus = logRes.rows[0]?.status;
 
       if (currentStatus !== 'overtime_stay') {
+        await clientOrPool.query(`DELETE FROM daily_logs WHERE duty_date = $1`, [dDate]);
         await clientOrPool.query(
           `INSERT INTO daily_logs (warehouse_id, duty_date, status, notes)
-           VALUES (NULL, $1, 'before_7pm', 'Auto-closed: Unconfirmed shift automatically marked as Before 7pm (No OT)')
-           ON CONFLICT (warehouse_id, duty_date)
-           DO UPDATE SET status = 'before_7pm', notes = 'Auto-closed: Unconfirmed shift automatically marked as Before 7pm (No OT)'
-           WHERE daily_logs.status IS DISTINCT FROM 'overtime_stay'`,
+           VALUES (NULL, $1, 'before_7pm', 'Auto-closed: Unconfirmed shift automatically marked as Before 7pm (No OT)')`,
           [dDate]
         );
 
@@ -224,9 +222,14 @@ export async function autoCloseUnconfirmedPastAssignments(clientOrPool = pool) {
   }
 }
 
-// Initialize DB schema on startup
+// Initialize DB schema on startup & clean any duplicate historical log rows
 initDb()
-  .then(() => autoCloseUnconfirmedPastAssignments(pool))
+  .then(async () => {
+    await pool.query(
+      `DELETE FROM daily_logs a USING daily_logs b WHERE a.id < b.id AND a.duty_date = b.duty_date`
+    );
+    await autoCloseUnconfirmedPastAssignments(pool);
+  })
   .catch((err) => {
     console.error('Database initialization warning:', err.message);
   });
@@ -307,8 +310,9 @@ app.get('/api/bootstrap', async (req, res) => {
        ORDER BY duty_date DESC`
     );
     const dailyLogsRes = await pool.query(
-      `SELECT id, warehouse_id, to_char(duty_date, 'YYYY-MM-DD') as duty_date, status, notes
-       FROM daily_logs`
+      `SELECT DISTINCT ON (duty_date) id, warehouse_id, to_char(duty_date, 'YYYY-MM-DD') as duty_date, status, notes
+       FROM daily_logs
+       ORDER BY duty_date, id DESC`
     );
 
     // Compute live metrics for each employee
@@ -626,11 +630,13 @@ app.put('/api/daily-status', async (req, res) => {
     }
 
     const whId = warehouse_id ? Number(warehouse_id) : null;
+
+    // Clear any previous conflicting log entries for this duty date to ensure exactly 1 canonical record
+    await pool.query('DELETE FROM daily_logs WHERE duty_date = $1', [duty_date]);
+
     const result = await pool.query(
       `INSERT INTO daily_logs (warehouse_id, duty_date, status, notes)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (warehouse_id, duty_date)
-       DO UPDATE SET status = $3, notes = $4
        RETURNING id, warehouse_id, to_char(duty_date, 'YYYY-MM-DD') as duty_date, status, notes`,
       [whId, duty_date, status, notes || null]
     );
@@ -729,10 +735,18 @@ app.post('/api/generate', async (req, res) => {
     ).rows;
     const reqMap = new Map(reqs.map((r) => [String(r.warehouse_id), r.worker_count]));
 
+    // Fetch day absent employees to exclude
+    const dayAbsentRes = await client.query(
+      `SELECT employee_id FROM assignments WHERE duty_date = $1 AND status = 'absent'`,
+      [duty_date]
+    );
+    const dayAbsentEmpIds = new Set(dayAbsentRes.rows.map((r) => String(r.employee_id)));
+
     // Fetch all active employees across both warehouses
     const allCandidates = employees.filter((emp) => {
       // Check if on vacation / absent
       if (isEmployeeAbsentOnDate(absences, emp.id, duty_date)) return false;
+      if (dayAbsentEmpIds.has(String(emp.id))) return false;
       return true;
     });
 
@@ -1465,6 +1479,14 @@ app.post('/api/assignments/confirm-today', async (req, res) => {
     return res.status(400).json({ error: 'duty_date is required' });
   }
 
+  // Safety rule: Only administrators can confirm past shifts. Mods can only confirm today.
+  const todayStr = getTodayDateStr();
+  if (duty_date < todayStr && req.user?.role !== 'admin') {
+    return res.status(403).json({
+      error: 'Forbidden: Only administrators can confirm past shifts. Mods can only confirm today.',
+    });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1473,12 +1495,11 @@ app.post('/api/assignments/confirm-today', async (req, res) => {
       ? 'Confirmed by dispatcher (Senior Supervisor acknowledged Head Office key delivery risk)'
       : 'Confirmed by dispatcher';
 
-    // Ensure daily log is set to 'overtime_stay'
+    // Ensure daily log is set to 'overtime_stay' and clear any conflicting previous records
+    await client.query(`DELETE FROM daily_logs WHERE duty_date = $1`, [duty_date]);
     await client.query(
       `INSERT INTO daily_logs (warehouse_id, duty_date, status, notes)
-       VALUES (NULL, $1, 'overtime_stay', $2)
-       ON CONFLICT (warehouse_id, duty_date)
-       DO UPDATE SET status = 'overtime_stay', notes = $2`,
+       VALUES (NULL, $1, 'overtime_stay', $2)`,
       [duty_date, notes]
     );
 

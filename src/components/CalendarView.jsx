@@ -44,14 +44,16 @@ export default function CalendarView({
 }) {
   const isAdmin = authUser?.role === 'admin';
   const getTodayDateStr = () => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   };
 
   const todayStr = getTodayDateStr();
+
+  // Single active warehouse reference
+  const activeWarehouse =
+    warehouses.find((w) => w.name === 'Main Warehouse' || w.active) ||
+    warehouses[0] || { id: '1', name: 'Main Warehouse' };
+
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedDateStr, setSelectedDateStr] = useState(() => getTodayDateStr());
   const [viewMode, setViewMode] = useState('calendar'); // 'calendar' | 'list'
@@ -162,8 +164,11 @@ export default function CalendarView({
 
   // Determine status for each date
   const getDateStatus = (dateStr) => {
-    // 1. Check daily_logs
-    const log = dailyLogs.find((l) => l.duty_date === dateStr);
+    // 1. Check daily_logs (match active warehouse or duty_date)
+    const log =
+      dailyLogs.find(
+        (l) => l.duty_date === dateStr && (String(l.warehouse_id) === String(activeWarehouse?.id) || !l.warehouse_id)
+      ) || dailyLogs.find((l) => l.duty_date === dateStr);
 
     if (log) {
       return { type: log.status, notes: log.notes };
@@ -234,11 +239,6 @@ export default function CalendarView({
       (selectedStatus.notes && selectedStatus.notes.includes('Emergency Sunday')) ||
       selectedAssignments.length > 0);
 
-  // Single active warehouse reference
-  const activeWarehouse =
-    warehouses.find((w) => w.name === 'Main Warehouse' || w.active) ||
-    warehouses[0] || { id: '1', name: 'Main Warehouse' };
-
   const superSeniorList = employees.filter((e) => e.experience === 'Super Senior' && e.active);
 
   const monthNames = [
@@ -249,10 +249,26 @@ export default function CalendarView({
   // Handlers
   const handleSetDayOutcome = async (newStatus) => {
     if (selectedDateStr < todayStr && !isAdmin) {
-      alert('Only administrators can modify the status of past dates.');
+      alert('Only administrators can modify the status of past dates. Mods can only modify today\'s status.');
       return;
     }
     await onUpdateDailyStatus(activeWarehouse.id, selectedDateStr, newStatus);
+
+    // If marked as Overtime Stay and less than 2 workers are active, automatically generate fair crew
+    if (newStatus === 'overtime_stay') {
+      const currentActive = assignments.filter(
+        (a) => a.duty_date === selectedDateStr && a.status !== 'absent'
+      );
+      if (currentActive.length < 2) {
+        await onGeneratePlan({
+          duty_date: selectedDateStr,
+          warehouse_id: activeWarehouse.id,
+          dry_run: false,
+        });
+        showToast('Marked as Overtime Stay & fair crew auto-selected.');
+        return;
+      }
+    }
     showToast(`Marked facility outcome as "${newStatus.replace('_', ' ')}"`);
   };
 

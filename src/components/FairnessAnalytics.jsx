@@ -20,8 +20,7 @@ export default function FairnessAnalytics({
 }) {
   // ── Month Selector ──────────────────────────────────────────────────────────
   const getTodayMonthStr = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
   };
 
   // Build list of months that have any assignment data, plus always include current month
