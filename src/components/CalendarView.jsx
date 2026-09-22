@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -30,8 +30,10 @@ export default function CalendarView({
   dailyRequirements = [],
   dailyLogs = [],
   authUser = null,
+  focusedDate = null,
   onUpdateStatus,
   onUpdateDailyStatus,
+  onRevertDailyStatus,
   onReportAbsence,
   onConfirmToday,
   onAssignSuperSenior,
@@ -102,6 +104,8 @@ export default function CalendarView({
 
   // Loading & Feedback states
   const [isConfirmingToday, setIsConfirmingToday] = useState(false);
+  const [draftOutcome, setDraftOutcome] = useState(null);
+  const [isSavingOutcome, setIsSavingOutcome] = useState(false);
   const [seniorRiskAcknowledged, setSeniorRiskAcknowledged] = useState(false);
   const [mobileTab, setMobileTab] = useState('today'); // 'today' | 'calendar'
   const [toastMessage, setToastMessage] = useState(null);
@@ -122,6 +126,14 @@ export default function CalendarView({
     setCurrentDate(now);
     setSelectedDateStr(getTodayDateStr());
   };
+
+  useEffect(() => {
+    if (!focusedDate) return;
+    const [focusYear, focusMonth] = focusedDate.split('-').map(Number);
+    setSelectedDateStr(focusedDate);
+    setCurrentDate(new Date(focusYear, focusMonth - 1, 1));
+    setMobileTab('calendar');
+  }, [focusedDate]);
 
   // Month grid setup
   const firstDayOfMonth = new Date(year, month, 1);
@@ -211,6 +223,15 @@ export default function CalendarView({
   };
 
   const selectedStatus = getDateStatus(selectedDateStr);
+  const selectedDailyLog = dailyLogs.find(
+    (log) =>
+      log.duty_date === selectedDateStr &&
+      (String(log.warehouse_id) === String(activeWarehouse?.id) || !log.warehouse_id)
+  );
+  const isOutcomeConfirmed = Boolean(
+    selectedDailyLog && ['overtime_stay', 'before_7pm', 'no_pickup', 'holiday'].includes(selectedDailyLog.status)
+  );
+  const selectedOutcome = draftOutcome?.date === selectedDateStr ? draftOutcome.status : selectedStatus.type;
   const isPastDate = selectedDateStr < todayStr;
   const isToday = selectedDateStr === todayStr;
   const isSelectedSunday = new Date(selectedDateStr + 'T00:00:00').getDay() === 0;
@@ -247,29 +268,50 @@ export default function CalendarView({
   ];
 
   // Handlers
-  const handleSetDayOutcome = async (newStatus) => {
+  const handleSetDayOutcome = (newStatus) => {
     if (selectedDateStr < todayStr && !isAdmin) {
       alert('Only administrators can modify the status of past dates. Mods can only modify today\'s status.');
       return;
     }
-    await onUpdateDailyStatus(activeWarehouse.id, selectedDateStr, newStatus);
+    setDraftOutcome({ date: selectedDateStr, status: newStatus });
+  };
 
-    // If marked as Overtime Stay and less than 2 workers are active, automatically generate fair crew
-    if (newStatus === 'overtime_stay') {
+  const handleConfirmDayOutcome = async () => {
+    if (!draftOutcome || draftOutcome.date !== selectedDateStr) return;
+    const newStatus = draftOutcome.status;
+    try {
+      setIsSavingOutcome(true);
+      await onUpdateDailyStatus(activeWarehouse.id, selectedDateStr, newStatus);
+
+      // If marked as Overtime Stay and less than 2 workers are active, automatically generate fair crew.
       const currentActive = assignments.filter(
-        (a) => a.duty_date === selectedDateStr && a.status !== 'absent'
+        (assignment) => assignment.duty_date === selectedDateStr && assignment.status !== 'absent'
       );
-      if (currentActive.length < 2) {
-        await onGeneratePlan({
-          duty_date: selectedDateStr,
-          warehouse_id: activeWarehouse.id,
-          dry_run: false,
-        });
-        showToast('Marked as Overtime Stay & fair crew auto-selected.');
-        return;
+      if (newStatus === 'overtime_stay' && currentActive.length < 2) {
+        await onGeneratePlan({ duty_date: selectedDateStr, warehouse_id: activeWarehouse.id, dry_run: false });
+        showToast('Outcome confirmed and a fair overtime crew was auto-selected.');
+      } else {
+        showToast(`Confirmed: ${newStatus.replace('_', ' ')}.`);
       }
+      setDraftOutcome(null);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIsSavingOutcome(false);
     }
-    showToast(`Marked facility outcome as "${newStatus.replace('_', ' ')}"`);
+  };
+
+  const handleRevertDayOutcome = async () => {
+    try {
+      setIsSavingOutcome(true);
+      await onRevertDailyStatus(selectedDateStr);
+      setDraftOutcome(null);
+      showToast('Confirmed outcome reverted. Select and confirm a replacement outcome.');
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIsSavingOutcome(false);
+    }
   };
 
   const handleQuickAutoSelect = async () => {
@@ -668,30 +710,31 @@ export default function CalendarView({
                   const isSelected = cell.dateStr === selectedDateStr;
 
                   return (
-                    <div
+                    <button
                       key={cell.dateStr}
+                      type="button"
                       className={`list-day-row ${isSelected ? 'selected' : ''}`}
                       onClick={() => setSelectedDateStr(cell.dateStr)}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div className="list-day-date-group">
                         <span className={`list-day-badge ${statusInfo.type}`}>
                           {cell.dayNum}
                         </span>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>
+                        <div className="list-day-copy">
+                          <div className="list-day-title">
                             {new Date(cell.dateStr + 'T00:00:00').toLocaleDateString(undefined, {
                               weekday: 'short',
                               month: 'short',
                               day: 'numeric',
                             })}
                           </div>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          <div className="list-day-note">
                             {statusInfo.notes || (cell.dateStr === todayStr ? "Today's Dispatch" : 'Daily Record')}
                           </div>
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                      <div className="list-day-statuses">
                         {hasSuperSeniorOnDate(cell.dateStr) && (
                           <span className="badge badge-super-senior" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                             👑 Super Senior
@@ -718,7 +761,7 @@ export default function CalendarView({
                           <span className="badge badge-status-scheduled">Scheduled</span>
                         )}
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
             </div>
@@ -801,40 +844,71 @@ export default function CalendarView({
             >
               <button
                 type="button"
-                className={`outcome-btn btn-overtime ${selectedStatus.type === 'overtime_stay' ? 'active' : ''}`}
+                className={`outcome-btn btn-overtime ${selectedOutcome === 'overtime_stay' ? 'active' : ''}`}
                 onClick={() => handleSetDayOutcome('overtime_stay')}
-                disabled={isPastDate && !isAdmin}
+                disabled={(isPastDate && !isAdmin) || isOutcomeConfirmed}
                 title={isPastDate && !isAdmin ? 'Past day status can only be modified by Administrator' : 'Truck arrived after hours; 1 person stayed overtime'}
               >
                 <CheckCircle2 size={14} /> OverTime Stay
               </button>
               <button
                 type="button"
-                className={`outcome-btn btn-before7pm ${selectedStatus.type === 'before_7pm' ? 'active' : ''}`}
+                className={`outcome-btn btn-before7pm ${selectedOutcome === 'before_7pm' ? 'active' : ''}`}
                 onClick={() => handleSetDayOutcome('before_7pm')}
-                disabled={isPastDate && !isAdmin}
+                disabled={(isPastDate && !isAdmin) || isOutcomeConfirmed}
                 title={isPastDate && !isAdmin ? 'Past day status can only be modified by Administrator' : 'Done during regular hours before 7pm; no overtime needed'}
               >
                 <Clock size={14} /> Before 7pm (No OT)
               </button>
               <button
                 type="button"
-                className={`outcome-btn btn-nopickup ${selectedStatus.type === 'no_pickup' ? 'active' : ''}`}
+                className={`outcome-btn btn-nopickup ${selectedOutcome === 'no_pickup' ? 'active' : ''}`}
                 onClick={() => handleSetDayOutcome('no_pickup')}
-                disabled={isPastDate && !isAdmin}
+                disabled={(isPastDate && !isAdmin) || isOutcomeConfirmed}
                 title={isPastDate && !isAdmin ? 'Past day status can only be modified by Administrator' : 'No delivery arrived; no pickup done'}
               >
                 <XCircle size={14} /> No Pickup
               </button>
               <button
                 type="button"
-                className={`outcome-btn btn-holiday ${selectedStatus.type === 'holiday' ? 'active' : ''}`}
+                className={`outcome-btn btn-holiday ${selectedOutcome === 'holiday' ? 'active' : ''}`}
                 onClick={() => handleSetDayOutcome('holiday')}
-                disabled={isPastDate && !isAdmin}
+                disabled={(isPastDate && !isAdmin) || isOutcomeConfirmed}
                 title={isPastDate && !isAdmin ? 'Past day status can only be modified by Administrator' : 'Entire warehouse was closed for holiday'}
               >
                 <Coffee size={14} /> Holiday
               </button>
+            </div>
+            <div className="outcome-confirmation-bar">
+              {isOutcomeConfirmed ? (
+                <>
+                  <span className="outcome-confirmed-copy">
+                    <CheckCircle2 size={15} /> Confirmed: {selectedStatus.type.replace('_', ' ')}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm outcome-revert-btn"
+                    disabled={isSavingOutcome || (isPastDate && !isAdmin)}
+                    onClick={handleRevertDayOutcome}
+                  >
+                    <RotateCw size={14} /> {isSavingOutcome ? 'Reverting…' : 'Revert outcome'}
+                  </button>
+                </>
+              ) : draftOutcome?.date === selectedDateStr ? (
+                <>
+                  <span className="outcome-draft-copy">Selected: {draftOutcome.status.replace('_', ' ')}. Confirm to save.</span>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm outcome-confirm-btn"
+                    disabled={isSavingOutcome}
+                    onClick={handleConfirmDayOutcome}
+                  >
+                    <CheckCircle2 size={14} /> {isSavingOutcome ? 'Confirming…' : 'Confirm outcome'}
+                  </button>
+                </>
+              ) : (
+                <span className="outcome-draft-copy">Select an outcome, then confirm it before the daily record changes.</span>
+              )}
             </div>
           </div>
 

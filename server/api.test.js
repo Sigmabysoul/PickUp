@@ -473,7 +473,7 @@ test('API Server Lifecycle & Endpoints', async (t) => {
     assert.equal(found.can_hold_key, true);
   });
 
-  await t.test('PUT /api/daily-status with non-overtime status clears assignments for that date', async () => {
+  await t.test('confirmed daily outcomes can be reverted without losing the existing crew', async () => {
     const testDate = '2026-09-25';
     // First schedule a test assignment
     await pool.query(
@@ -505,7 +505,16 @@ test('API Server Lifecycle & Endpoints', async (t) => {
       `SELECT COUNT(*) FROM assignments WHERE duty_date = $1`,
       [testDate]
     );
-    assert.equal(Number(countAfter.rows[0].count), 0, 'Assignments must be deleted when status is not overtime_stay');
+    assert.equal(Number(countAfter.rows[0].count), Number(countBefore.rows[0].count), 'Assignments must remain available after a revert');
+
+    const revertRes = await apiFetch(`${baseUrl}/api/daily-status`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duty_date: testDate }),
+    });
+    assert.equal(revertRes.status, 200);
+    const logAfterRevert = await pool.query('SELECT COUNT(*) FROM daily_logs WHERE duty_date = $1', [testDate]);
+    assert.equal(Number(logAfterRevert.rows[0].count), 0);
   });
 
   await t.test('POST /api/assignments/confirm-today records senior risk override if acknowledged', async () => {

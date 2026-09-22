@@ -590,6 +590,30 @@ export default function EmployeeManager({
               </div>
 
               <div className="form-group">
+                <label className="form-label">Home Warehouse</label>
+                <select
+                  className="form-select"
+                  required
+                  value={empForm.warehouse_id}
+                  onChange={(e) => setEmpForm({ ...empForm, warehouse_id: e.target.value })}
+                >
+                  <option value="" disabled>
+                    Select a warehouse
+                  </option>
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                    </option>
+                  ))}
+                </select>
+                {warehouses.length === 0 && (
+                  <p className="form-help-text">
+                    Add a warehouse in Settings before creating a staff member.
+                  </p>
+                )}
+              </div>
+
+              <div className="form-group">
                 <label className="form-label">Experience Level</label>
                 <select
                   className="form-select"
@@ -683,7 +707,10 @@ export default function EmployeeManager({
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                   <Key size={15} color="#eab308" /> Head Office Key Authorization
                 </label>
-                <div
+                <button
+                  type="button"
+                  className={`key-holder-toggle ${empForm.can_hold_key ? 'is-selected' : ''}`}
+                  aria-pressed={empForm.can_hold_key}
                   onClick={() => setEmpForm({ ...empForm, can_hold_key: !empForm.can_hold_key })}
                   style={{
                     display: 'flex',
@@ -691,7 +718,6 @@ export default function EmployeeManager({
                     gap: '0.85rem',
                     padding: '0.85rem 1rem',
                     borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer',
                     backgroundColor: empForm.can_hold_key ? 'rgba(234, 179, 8, 0.15)' : 'var(--bg-surface-elevated)',
                     border: empForm.can_hold_key ? '1.5px solid #eab308' : '1px solid var(--border-color)',
                     transition: 'all 0.18s ease',
@@ -723,7 +749,7 @@ export default function EmployeeManager({
                       Can lock up and submit facility keys to Head Office after overtime duty. Overtime shifts require at least 1 key holder.
                     </div>
                   </div>
-                </div>
+                </button>
               </div>
 
               <div className="form-group">

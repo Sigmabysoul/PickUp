@@ -117,6 +117,7 @@ export default function App() {
 
 function MainApp() {
   const [activeTab, setActiveTab] = useState('calendar');
+  const [calendarFocusDate, setCalendarFocusDate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -306,20 +307,34 @@ function MainApp() {
   };
 
   const handleUpdateDailyStatus = async (warehouse_id, duty_date, status, notes = '') => {
-    try {
-      const res = await authFetch('/api/daily-status', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ warehouse_id, duty_date, status, notes }),
-      });
-      if (!res.ok) {
-        const b = await res.json();
-        throw new Error(b.error || 'Failed to update daily status');
-      }
-      await fetchBootstrapData();
-    } catch (err) {
-      alert(err.message);
+    const res = await authFetch('/api/daily-status', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ warehouse_id, duty_date, status, notes }),
+    });
+    if (!res.ok) {
+      const b = await res.json();
+      throw new Error(b.error || 'Failed to update daily status');
     }
+    await fetchBootstrapData();
+  };
+
+  const handleRevertDailyStatus = async (duty_date) => {
+    const res = await authFetch('/api/daily-status', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duty_date }),
+    });
+    if (!res.ok) {
+      const b = await res.json();
+      throw new Error(b.error || 'Failed to revert daily status');
+    }
+    await fetchBootstrapData();
+  };
+
+  const handleOpenCalendarDate = (date) => {
+    setCalendarFocusDate(date);
+    setActiveTab('calendar');
   };
 
   const handleSaveRequirement = async (warehouse_id, duty_date, worker_count) => {
@@ -717,7 +732,9 @@ function MainApp() {
                 dailyRequirements={data.dailyRequirements}
                 dailyLogs={data.dailyLogs || []}
                 authUser={authUser}
+                focusedDate={calendarFocusDate}
                 onUpdateDailyStatus={handleUpdateDailyStatus}
+                onRevertDailyStatus={handleRevertDailyStatus}
                 onUpdateAssignmentStatus={handleUpdateAssignmentStatus}
                 onReportAbsence={handleReportAbsence}
                 onConfirmToday={handleConfirmToday}
@@ -763,6 +780,7 @@ function MainApp() {
               employees={data.employees}
               assignments={data.assignments}
               runs={data.runs}
+              onOpenCalendarDate={handleOpenCalendarDate}
             />
           )}
         </div>

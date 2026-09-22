@@ -641,22 +641,33 @@ app.put('/api/daily-status', async (req, res) => {
       [whId, duty_date, status, notes || null]
     );
 
-    // If day outcome is anything other than overtime stay, remove assignments so participant names disappear
-    if (status !== 'overtime_stay') {
-      if (whId) {
-        await pool.query(
-          `DELETE FROM assignments WHERE warehouse_id = $1 AND duty_date = $2`,
-          [whId, duty_date]
-        );
-      } else {
-        await pool.query(
-          `DELETE FROM assignments WHERE duty_date = $1`,
-          [duty_date]
-        );
-      }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reopen a confirmed outcome so the dispatcher can select and confirm a correction.
+// Assignments are deliberately retained while another outcome is confirmed, so a
+// reverted overtime plan can be restored instead of silently losing its crew.
+app.delete('/api/daily-status', async (req, res) => {
+  try {
+    const { duty_date } = req.body || {};
+    if (!duty_date) return res.status(400).json({ error: 'duty_date is required' });
+
+    const todayStr = getTodayDateStr();
+    if (duty_date < todayStr && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Only administrators can revert past day outcomes.' });
     }
 
-    res.json(result.rows[0]);
+    const result = await pool.query(
+      `DELETE FROM daily_logs
+       WHERE duty_date = $1 AND status IN ('overtime_stay', 'before_7pm', 'no_pickup', 'holiday')
+       RETURNING id`,
+      [duty_date]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'No confirmed outcome found for this date.' });
+    res.json({ success: true, duty_date });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

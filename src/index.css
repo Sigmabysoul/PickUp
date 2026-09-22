@@ -1003,7 +1003,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /* Keep dialogs above the mobile bottom navigation (z-index: 1000). */
+  z-index: 1100;
   backdrop-filter: blur(6px);
 }
 
@@ -1035,6 +1036,42 @@ button {
   justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 1.5rem;
+}
+
+.form-help-text {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.key-holder-toggle {
+  width: 100%;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.key-holder-toggle:focus-visible {
+  outline: 3px solid rgba(56, 189, 248, 0.45);
+  outline-offset: 2px;
+}
+
+.fairness-worker-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.fairness-worker-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fairness-worker-identity > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Alerts */
@@ -1449,6 +1486,76 @@ button {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.5rem;
 }
+
+.outcome-confirmation-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 38px;
+  padding-top: 0.15rem;
+}
+
+.outcome-draft-copy,
+.outcome-confirmed-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.outcome-confirmed-copy { color: var(--accent-green-hover); font-weight: 700; }
+.outcome-confirm-btn { white-space: nowrap; }
+.outcome-revert-btn { white-space: nowrap; color: var(--accent-amber); }
+
+/* Calendar list: a date-led scan view with a visible status trail. */
+.attendance-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: 540px;
+  overflow-y: auto;
+  padding: 0.2rem 0.1rem 0.35rem;
+}
+
+.list-day-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 0.9rem;
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.list-day-row:hover { transform: translateX(2px); border-color: var(--accent-blue); }
+.list-day-row.selected { border-color: var(--accent-blue); border-left-color: var(--accent-blue); background: rgba(56, 189, 248, 0.1); }
+.list-day-date-group { display: flex; min-width: 0; align-items: center; gap: 0.75rem; }
+.list-day-badge { display: inline-flex; width: 38px; height: 38px; flex: 0 0 38px; align-items: center; justify-content: center; border-radius: 10px; font-size: 0.95rem; font-weight: 900; background: var(--bg-surface); border: 1px solid var(--border-color); }
+.list-day-badge.overtime_stay { color: #86efac; border-color: rgba(34, 197, 94, 0.6); }
+.list-day-badge.before_7pm { color: #7dd3fc; border-color: rgba(56, 189, 248, 0.6); }
+.list-day-badge.no_pickup { color: #fca5a5; border-color: rgba(239, 68, 68, 0.6); }
+.list-day-badge.holiday { color: #e9d5ff; border-color: rgba(192, 132, 252, 0.6); }
+.list-day-copy { min-width: 0; }
+.list-day-title { font-weight: 800; font-size: 0.92rem; }
+.list-day-note { overflow: hidden; color: var(--text-muted); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+.list-day-statuses { display: flex; flex: 0 0 auto; justify-content: flex-end; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+
+.fairness-worker-card { cursor: pointer; }
+.fairness-worker-card:focus-visible { outline: 3px solid rgba(56, 189, 248, 0.45); outline-offset: 3px; }
+.fairness-worker-card.is-expanded { border-color: var(--accent-cyan) !important; }
+.fairness-stay-dates { border-top: 1px solid var(--border-color); margin-top: 0.1rem; padding-top: 0.65rem; }
+.fairness-stay-dates-label { display: block; margin-bottom: 0.45rem; color: var(--text-muted); font-size: 0.74rem; }
+.fairness-stay-date-list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.fairness-stay-date { display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 999px; padding: 0.3rem 0.55rem; background: rgba(56, 189, 248, 0.1); color: var(--accent-blue); font-size: 0.74rem; font-weight: 700; }
+.fairness-stay-date:hover { border-color: var(--accent-blue); background: rgba(56, 189, 248, 0.18); }
 
 .outcome-btn {
   display: inline-flex;
@@ -2167,6 +2274,16 @@ button {
     gap: 0.5rem;
   }
 
+  .mobile-emp-header > div:first-child {
+    min-width: 0;
+  }
+
+  .mobile-emp-header > .badge {
+    max-width: 52%;
+    text-align: right;
+    white-space: normal;
+  }
+
   .mobile-emp-name {
     font-size: 1.05rem;
     font-weight: 800;
@@ -2332,6 +2449,25 @@ button {
     gap: 0.4rem;
   }
 
+  .outcome-confirmation-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .outcome-confirmation-bar .btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 42px;
+  }
+
+  .list-day-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .list-day-statuses { justify-content: flex-start; }
+
   .outcome-btn {
     padding: 0.55rem 0.45rem;
     font-size: 0.76rem;
@@ -2393,6 +2529,8 @@ button {
     border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
     max-height: 88vh;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 1.25rem 1.15rem;
     margin: 0;
   }
@@ -2675,5 +2813,18 @@ button {
     display: block !important;
     animation: tabEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
-}
 
+  .fairness-month-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .fairness-month-controls .form-select {
+    flex: 1;
+    min-width: 0 !important;
+  }
+
+  .fairness-worker-card-header {
+    align-items: flex-start;
+  }
+}

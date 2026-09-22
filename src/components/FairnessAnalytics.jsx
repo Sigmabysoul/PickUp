@@ -17,6 +17,7 @@ export default function FairnessAnalytics({
   employees = [],
   assignments = [],
   runs = [],
+  onOpenCalendarDate,
 }) {
   // ── Month Selector ──────────────────────────────────────────────────────────
   const getTodayMonthStr = () => {
@@ -37,6 +38,7 @@ export default function FairnessAnalytics({
 
   const [selectedMonth, setSelectedMonth] = useState(() => getTodayMonthStr());
   const [showMobileMetrics, setShowMobileMetrics] = useState(false);
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState(null);
 
   const formatMonthLabel = (monthStr) => {
     const [year, month] = monthStr.split('-');
@@ -50,7 +52,13 @@ export default function FairnessAnalytics({
     [assignments, selectedMonth]
   );
 
-  const activeEmployees = employees.filter((e) => e.active && e.experience !== 'Super Senior');
+  // Match the roster eligible for normal rotation. On-call Super Seniors do
+  // not count, but explicitly eligible Super Seniors do.
+  const activeEmployees = employees.filter(
+    (employee) =>
+      employee.active &&
+      (employee.experience !== 'Super Senior' || employee.eligible_for_normal_pickup)
+  );
 
   // Per-employee stay count for the selected month
   const monthStayByEmpId = useMemo(() => {
@@ -62,6 +70,18 @@ export default function FairnessAnalytics({
       }
     }
     return map;
+  }, [monthAssignments]);
+
+  const monthStayDatesByEmpId = useMemo(() => {
+    const datesByEmployee = new Map();
+    for (const assignment of monthAssignments) {
+      if (assignment.status !== 'completed') continue;
+      const employeeId = String(assignment.employee_id);
+      const dates = datesByEmployee.get(employeeId) || [];
+      dates.push(assignment.duty_date);
+      datesByEmployee.set(employeeId, dates);
+    }
+    return datesByEmployee;
   }, [monthAssignments]);
 
   const totalCompleted = monthAssignments.filter((a) => a.status === 'completed').length;
@@ -94,12 +114,13 @@ export default function FairnessAnalytics({
       : `Deviation spread: ${variance} shifts`;
 
   // Priority queue: missed duty this month
-  const priorityWorkers = employees.filter((e) => e.hasMissedPriority);
+  const priorityWorkers = activeEmployees.filter((employee) => employee.hasMissedPriority);
 
   // Sorted by month stays desc
   const sortedActive = [...activeEmployees].sort(
     (a, b) =>
-      (monthStayByEmpId.get(String(b.id)) || 0) - (monthStayByEmpId.get(String(a.id)) || 0)
+      (monthStayByEmpId.get(String(b.id)) || 0) - (monthStayByEmpId.get(String(a.id)) || 0) ||
+      a.name.localeCompare(b.name)
   );
 
   // Filter runs to selected month
@@ -260,6 +281,8 @@ export default function FairnessAnalytics({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '1rem', marginTop: '0.5rem' }}>
             {sortedActive.map((emp) => {
               const count = monthStayByEmpId.get(String(emp.id)) || 0;
+              const stayDates = monthStayDatesByEmpId.get(String(emp.id)) || [];
+              const isExpanded = String(expandedEmployeeId) === String(emp.id);
               const maxVal = maxStays > 0 ? maxStays : 1;
               const pct = Math.min(100, Math.round((count / maxVal) * 100));
               const badgeClass =
@@ -274,6 +297,18 @@ export default function FairnessAnalytics({
               return (
                 <div
                   key={emp.id}
+                  className={`fairness-worker-card ${isExpanded ? 'is-expanded' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
+                  aria-label={`Show completed stay dates for ${emp.name}`}
+                  onClick={() => setExpandedEmployeeId(isExpanded ? null : emp.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setExpandedEmployeeId(isExpanded ? null : emp.id);
+                    }
+                  }}
                   style={{
                     backgroundColor: 'var(--bg-surface-elevated)',
                     padding: '0.9rem 1rem',
@@ -285,8 +320,8 @@ export default function FairnessAnalytics({
                     transition: 'all 0.2s ease',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div className="fairness-worker-card-header">
+                    <div className="fairness-worker-identity">
                       <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{emp.name}</span>
                       <span className={`badge ${badgeClass}`} style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem' }}>
                         {emp.experience}
@@ -307,6 +342,28 @@ export default function FairnessAnalytics({
                       Skill {emp.skill}/5 · All-time: {emp.completedCount || 0}
                     </span>
                   </div>
+                  {isExpanded && (
+                    <div className="fairness-stay-dates" onClick={(event) => event.stopPropagation()}>
+                      <span className="fairness-stay-dates-label">
+                        {stayDates.length ? `Completed stay dates in ${formatMonthLabel(selectedMonth)}` : `No completed stays in ${formatMonthLabel(selectedMonth)}`}
+                      </span>
+                      {stayDates.length > 0 && (
+                        <div className="fairness-stay-date-list">
+                          {stayDates.map((date) => (
+                            <button
+                              key={date}
+                              type="button"
+                              className="fairness-stay-date"
+                              onClick={() => onOpenCalendarDate?.(date)}
+                              title={`Open ${date} in the calendar`}
+                            >
+                              <Calendar size={13} /> {new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
